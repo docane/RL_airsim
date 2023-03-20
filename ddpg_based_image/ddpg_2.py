@@ -1,3 +1,4 @@
+import datetime as dt
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2 as cv
@@ -87,13 +88,13 @@ class DDPGagent(object):
         self.actor = Actor(self.action_dim, self.action_bound)
         self.target_actor = Actor(self.action_dim, self.action_bound)
 
-        self.actor.build(input_shape=(1, 84, 84, 3))
-        self.target_actor.build(input_shape=(1, 84, 84, 3))
+        self.actor.build(input_shape=(1, 84, 84, 1))
+        self.target_actor.build(input_shape=(1, 84, 84, 1))
 
         self.critic = Critic()
         self.target_critic = Critic()
 
-        state_in = Input((84, 84, 3))
+        state_in = Input((84, 84, 1))
         action_in = Input((self.action_dim,))
         self.critic([state_in, action_in])
         self.target_critic([state_in, action_in])
@@ -104,6 +105,9 @@ class DDPGagent(object):
         self.buffer = ReplayBuffer(self.buffer_size)
 
         self.save_episode_reward = []
+
+        self.writer = tf.summary.create_file_writer(
+            f'summary/airsim_ddpg_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}')
 
     def update_target_network(self, tau):
         theta = self.actor.get_weights()
@@ -154,10 +158,14 @@ class DDPGagent(object):
         self.critic.load_weights(path + 'airsim_critic.h5')
 
     def get_action(self, state):
-        # state = np.reshape(state, (1, 84, 84, 3))
+        state = np.reshape(state, (1, 84, 84, 1))
         action = self.actor(tf.convert_to_tensor([state], dtype=tf.float32))
         action = action.numpy()[0]
         return action
+
+    def draw_tensorboard(self, score, e):
+        with self.writer.as_default():
+            tf.summary.scalar('Total Reward/Episode', score, step=e)
 
     def train(self, max_episode_max):
         self.update_target_network(1.0)
@@ -167,25 +175,29 @@ class DDPGagent(object):
             time, episode_reward, done = 0, 0, False
             critic_loss, actor_loss = 0, 0
             state = self.env.reset()
-
+            state = pre_processing(state)
             while not done:
+
                 action = self.get_action(state)
                 noise = self.ou_noise(pre_noise, dim=self.action_dim)
                 action = np.clip(action + noise, -self.action_bound, self.action_bound)
                 next_state, reward, done, _ = self.env.step(action)
+                next_state = pre_processing(next_state)
                 self.buffer.add_buffer(state, action, reward, next_state, done)
 
                 if self.buffer.buffer_count() > 100:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
+                    states = np.reshape(states, (-1, 84, 84, 1))
+                    next_states = np.reshape(next_states, (-1, 84, 84, 1))
                     target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
                                                     self.target_actor(
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
                     y_i = self.td_target(rewards, target_qs.numpy(), dones)
                     actions = np.reshape(actions, (-1, 1))
-                    self.critic_learn(tf.convert_to_tensor(states, dtype=tf.float32),
-                                      tf.convert_to_tensor(actions, dtype=tf.float32),
-                                      tf.convert_to_tensor(y_i, dtype=tf.float32))
-                    self.actor_learn(tf.convert_to_tensor(states, dtype=tf.float32))
+                    critic_loss = self.critic_learn(tf.convert_to_tensor(states, dtype=tf.float32),
+                                                    tf.convert_to_tensor(actions, dtype=tf.float32),
+                                                    tf.convert_to_tensor(y_i, dtype=tf.float32))
+                    actor_loss = self.actor_learn(tf.convert_to_tensor(states, dtype=tf.float32))
                     self.update_target_network(self.tau)
 
                 pre_noise = noise
@@ -194,8 +206,10 @@ class DDPGagent(object):
                 time += 1
 
             total_time += time
-            print('Episode:', ep + 1, 'Total Time:', total_time, 'Reward:', episode_reward)
+            print('Episode:', ep + 1, 'Total Time:', total_time, 'Reward:', episode_reward, end=' ')
+            print('Critic Loss:', critic_loss, 'Actor Loss:', actor_loss)
             self.save_episode_reward.append(episode_reward)
+            self.draw_tensorboard(episode_reward, ep)
 
 
 def pre_processing(observe):
