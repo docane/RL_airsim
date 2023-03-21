@@ -175,8 +175,11 @@ class AirSimCarEnv(AirSimEnv):
         pts = [np.array([self.x[i], self.y[i]]) for i in range(len(self.x))]
         car_pre_pt = self.state['preposition'][:2]
         car_pt = self.state['position'][:2]
+        reward = 0
+        done = 0
 
         ###########################################################################################################
+
         # print(car_pt)
         # dist = 10000000
         # print(len(pts))
@@ -199,50 +202,50 @@ class AirSimCarEnv(AirSimEnv):
 
         #############################################################################################################
 
-        temp = np.array(
-            [math.sqrt(((car_pt[0] - pts[i][0]) ** 2) + ((car_pt[1] - pts[i][1]) ** 2)) for i in range(len(pts))])
-        min_dist = np.nanmin(temp)
-        index = np.argmin(temp)
-
-        temp_x = pts[index + 10][0][0] - pts[index][0][0]
-        temp_y = pts[index + 10][1][0] - pts[index][1][0]
-        v1 = np.array([temp_x, temp_y])
-
-        temp_x = car_pt[0] - car_pre_pt[0]
-        temp_y = car_pt[1] - car_pre_pt[1]
-        v2 = np.array([temp_x, temp_y])
-
-        dist1 = np.linalg.norm(v1)
-        dist2 = np.linalg.norm(v2)
-
-        ip = v1[0] * v2[0] + v1[1] * v2[1]
-
-        ip2 = dist1 * dist2
-
-        cost = ip / (ip2 + 0.00001)
-        theta = math.acos(cost)
-        reward = 0
-
-        angular_reward = (0.35 - theta / np.pi) / 10
-        reward += angular_reward
-        print(f'angular reward: {angular_reward}')
-        # dist_reward = (0.003 - min_dist)
-        dist_reward = gaussian(min_dist, sigma=0.5) - 0.2
-        if reward > 0:
-            if dist_reward > 0:
-                reward *= dist_reward
-        if reward < 0:
-            if dist_reward < 0:
-                reward *= -dist_reward
-        print(f'distance reward: {dist_reward}')
-        reward_speed = (self.car_state.speed - min_speed) / (max_speed - min_speed)
-        reward += reward_speed
-        print(f'speed reward: {reward_speed}')
-
-        done = 0
-        if min_dist > 2:
-            reward -= 3
-            done = 1
+        # temp = np.array(
+        #     [math.sqrt(((car_pt[0] - pts[i][0]) ** 2) + ((car_pt[1] - pts[i][1]) ** 2)) for i in range(len(pts))])
+        # min_dist = np.nanmin(temp)
+        # index = np.argmin(temp)
+        #
+        # temp_x = pts[index + 10][0][0] - pts[index][0][0]
+        # temp_y = pts[index + 10][1][0] - pts[index][1][0]
+        # v1 = np.array([temp_x, temp_y])
+        #
+        # temp_x = car_pt[0] - car_pre_pt[0]
+        # temp_y = car_pt[1] - car_pre_pt[1]
+        # v2 = np.array([temp_x, temp_y])
+        #
+        # dist1 = np.linalg.norm(v1)
+        # dist2 = np.linalg.norm(v2)
+        #
+        # ip = v1[0] * v2[0] + v1[1] * v2[1]
+        #
+        # ip2 = dist1 * dist2
+        #
+        # cost = ip / (ip2 + 0.00001)
+        # theta = math.acos(cost)
+        # reward = 0
+        #
+        # angular_reward = (0.35 - theta / np.pi) / 10
+        # reward += angular_reward
+        # print(f'angular reward: {angular_reward}')
+        # # dist_reward = (0.003 - min_dist)
+        # dist_reward = gaussian(min_dist, sigma=0.5) - 0.2
+        # if reward > 0:
+        #     if dist_reward > 0:
+        #         reward *= dist_reward
+        # if reward < 0:
+        #     if dist_reward < 0:
+        #         reward *= -dist_reward
+        # print(f'distance reward: {dist_reward}')
+        # reward_speed = (self.car_state.speed - min_speed) / (max_speed - min_speed)
+        # reward += reward_speed
+        # print(f'speed reward: {reward_speed}')
+        #
+        # done = 0
+        # if min_dist > 2:
+        #     reward -= 3
+        #     done = 1
 
         #################################################################################################
 
@@ -262,6 +265,18 @@ class AirSimCarEnv(AirSimEnv):
         # if self.state['collision']:
         #     reward -= 3
         #     done = 1
+
+        #################################################################################################
+
+        temp = np.array(
+            [math.sqrt(((car_pt[0] - pts[i][0]) ** 2) + ((car_pt[1] - pts[i][1]) ** 2)) for i in range(len(pts))])
+        min_dist = np.nanmin(temp)
+        print(min_dist)
+        min_dist_index = np.argmin(temp)
+        print(min_dist_index)
+
+        if self.state['collision']:
+            done = 1
 
         return reward, done
 

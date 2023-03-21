@@ -3,6 +3,7 @@ import datetime as dt
 import numpy as np
 from keras.models import Model
 from keras.layers import Input, Dense, concatenate
+from tensorflow.keras.initializers import RandomUniform
 from keras.optimizers import Adam
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
@@ -24,15 +25,13 @@ class Actor(Model):
 
         self.action_size = action_dim
 
-        self.dense1 = Dense(64, activation='relu', kernel_initializer='random_uniform')
-        self.dense2 = Dense(32, activation='relu', kernel_initializer='random_uniform')
-        self.dense3 = Dense(16, activation='relu', kernel_initializer='random_uniform')
+        self.dense1 = Dense(120, activation='relu', kernel_initializer='random_uniform')
+        self.dense2 = Dense(240, activation='relu', kernel_initializer='random_uniform')
         self.action = Dense(self.action_size, activation='tanh', kernel_initializer='random_uniform')
 
     def call(self, x):
         x = self.dense1(x)
         x = self.dense2(x)
-        x = self.dense3(x)
         action = self.action(x)
 
         return action
@@ -41,10 +40,10 @@ class Actor(Model):
 class Critic(Model):
     def __init__(self):
         super(Critic, self).__init__()
-        self.x1 = Dense(32, activation='relu', kernel_initializer='random_uniform')
-        self.a1 = Dense(32, activation='relu', kernel_initializer='random_uniform')
-        self.h2 = Dense(32, activation='relu', kernel_initializer='random_uniform')
-        self.h3 = Dense(16, activation='relu', kernel_initializer='random_uniform')
+        self.x1 = Dense(120, activation='relu', kernel_initializer='random_uniform')
+        self.x2 = Dense(240, activation='relu', kernel_initializer='random_uniform')
+        self.a1 = Dense(240, activation='relu', kernel_initializer='random_uniform')
+        self.h1 = Dense(240, activation='relu', kernel_initializer='random_uniform')
         self.q = Dense(1, activation='linear', kernel_initializer='random_uniform')
 
     def call(self, state_action):
@@ -52,16 +51,12 @@ class Critic(Model):
         action = state_action[1]
 
         x = self.x1(state)
+        x = self.x2(x)
         a = self.a1(action)
         h = concatenate([x, a], axis=-1)
-        x = self.h2(h)
-        x = self.h3(x)
+        x = self.h1(h)
         q = self.q(x)
         return q
-
-
-def ou_noise(x, rho=0.15, mu=0, dt=1e-1, sigma=0.2, dim=1):
-    return x + rho * (mu - x) * dt + sigma * np.sqrt(dt) * np.random.normal(size=dim)
 
 
 class DDPGagent(object):
@@ -94,6 +89,9 @@ class DDPGagent(object):
 
         self.actor_opt = Adam(self.actor_learning_rate)
         self.critic_opt = Adam(self.critic_learning_rate)
+
+        self.actor.summary()
+        self.critic.summary()
 
         self.buffer = ReplayBuffer(self.buffer_size)
 
@@ -143,6 +141,10 @@ class DDPGagent(object):
                 y_k[i] = rewards[i] * self.gamma * q_values[i]
         return y_k
 
+    @staticmethod
+    def ou_noise(x, rho=0.15, mu=0, dt=1e-1, sigma=0.2, dim=1):
+        return x + rho * (mu - x) * dt + sigma * np.sqrt(dt) * np.random.normal(size=dim)
+
     def load_weights(self, path):
         self.actor.load_weights(path + 'airsim_ddpg_actor.h5')
         self.critic.load_weights(path + 'airsim_ddpg_critic.h5')
@@ -175,20 +177,18 @@ class DDPGagent(object):
             while not done:
                 action = self.get_action(state)
                 print(action)
-                noise = ou_noise(pre_noise, dim=self.action_dim)
-                # print(noise)
+                noise = self.ou_noise(pre_noise, dim=self.action_dim)
                 action = np.clip(action + noise, -self.action_bound, self.action_bound)
-                # print(action)
                 next_state, reward, done, _ = self.env.step(action)
+                print(reward)
                 self.buffer.add_buffer(state, action, reward, next_state, done)
 
-                if self.buffer.buffer_count() > 200:
+                if self.buffer.buffer_count() > 2000:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
                     target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
                                                     self.target_actor(
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
                     y_i = self.td_target(rewards, target_qs.numpy(), dones)
-                    actions = np.reshape(actions, (-1, 1))
                     critic_loss = self.critic_learn(tf.convert_to_tensor(states, dtype=tf.float32),
                                                     tf.convert_to_tensor(actions, dtype=tf.float32),
                                                     tf.convert_to_tensor(y_i, dtype=tf.float32))
@@ -209,4 +209,4 @@ class DDPGagent(object):
             print(log)
             self.save_episode_reward.append(episode_reward)
             self.draw_tensorboard(episode_reward, ep)
-            self.save_weights('./models/2023-03-16-14-30-50/')
+            self.save_weights('./models/2023-03-22-12-16-00/')

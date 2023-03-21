@@ -51,15 +51,17 @@ while True:
     state['linear_velocity'] = car_state.kinematics_estimated.linear_velocity.to_numpy_array()
     state['angular_velocity'] = car_state.kinematics_estimated.angular_velocity.to_numpy_array()
 
-    print(f'Speed: {car_state.speed}')
-    print(f'Linear Velocity: {state["linear_velocity"]}')
-    print(f'Position: {state["position"]}')
+    # print(f'Speed: {car_state.speed}')
+    # print(f'Linear Velocity: {state["linear_velocity"]}')
+    # print(f'Position: {state["position"]}')
     # print(f'Angular Velocity: {state["angular_velocity"]}')
     #
     # print(f'Linear Veocity Norm: {np.linalg.norm(state["linear_velocity"])}')
     # print(f'Angular Velocity Norm: {np.linalg.norm(state["angular_velocity"])}')
 
     car_pt = state['position'][:2]
+    # print(state['angular_velocity'])
+    # print(state['pose'])
     # dist = 10000000
 
     # for i in range(len(pts) - 1):
