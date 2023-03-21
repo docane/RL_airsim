@@ -1,14 +1,14 @@
 import gym
-from state_ddpg_1 import DDPGagent
+from state_ddpg_3 import DDPGagent
 import tensorflow as tf
 
-gym.envs.register(id='car_env-v0', entry_point='car_env_state_1:AirSimCarEnv')
+gym.envs.register(id='car_env-v0', entry_point='car_env_state_14:AirSimCarEnv')
 
 
 def main():
     env = gym.make('car_env-v0', ip_address='127.0.0.1')
     agent = DDPGagent(env)
-    agent.load_weights('./models/2023-02-16-16-21-50/')
+    agent.load_weights('./models/2023-03-22-12-16-00/')
     state = env.reset()
 
     while True:
