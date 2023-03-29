@@ -109,8 +109,8 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = 0
         self.car.setCarControls(self.car_controls)
 
-        self.rand = np.random.randint(0, len(self.trajectory) - 200)
-        # self.rand = 0
+        # self.rand = np.random.randint(0, len(self.trajectory) - 200)
+        self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
         self.car.simSetVehiclePose(airsim.Pose(airsim.Vector3r(randrow['POS_X'],
                                                                randrow['POS_Y'],
@@ -120,7 +120,8 @@ class AirSimCarEnv(AirSimEnv):
                                                                   randrow['Q_Z'],
                                                                   randrow['Q_W'])), True)
 
-        time.sleep(0.01)
+        self.car.simPause(True)
+        self.car.simContinueForTime(2)
 
     def __del__(self):
         self.car.reset()
@@ -131,6 +132,7 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = float(action)
 
         self.car.setCarControls(self.car_controls)
+        self.car.simContinueForTime(0.1)
 
     def _get_obs(self):
         self.car_state = self.car.getCarState()
@@ -161,8 +163,6 @@ class AirSimCarEnv(AirSimEnv):
         return np.array(temp)
 
     def _compute_reward(self):
-        reward = 0
-        done = 0
         car_pt = self.state['position'][:2]
 
         # 차량이 경로상에 어느 지점에 있는지 확인
@@ -189,7 +189,12 @@ class AirSimCarEnv(AirSimEnv):
         # if reward < 3:
         #     reward = -1
 
+        car_dir_vec = self.state['linear_velocity'][:2] / np.linalg.norm(self.state['linear_velocity'][:2])
+        print(car_dir_vec)
+
+        done = 0
         if self.state['collision']:
+            reward -= 1
             done = 1
 
         return reward, done
@@ -198,7 +203,7 @@ class AirSimCarEnv(AirSimEnv):
         self._do_action(action)
         obs = self._get_obs()
         reward, done = self._compute_reward()
-        time.sleep(0.5)
+        # time.sleep(0.5)
         return obs, reward, done, {}
 
     def reset(self):
