@@ -2,7 +2,7 @@ import time
 import datetime as dt
 import numpy as np
 from keras.models import Model
-from keras.layers import Input, Dense, concatenate
+from keras.layers import Input, Dense, concatenate, BatchNormalization
 from keras.activations import leaky_relu
 from keras.optimizers import Adam
 import tensorflow as tf
@@ -29,12 +29,16 @@ class Actor(Model):
         self.action_size = action_dim
 
         self.dense1 = Dense(120, activation=leaky_relu)
+        self.batch_norm1 = BatchNormalization()
         self.dense2 = Dense(240, activation=leaky_relu)
+        self.batch_norm2 = BatchNormalization()
         self.action = Dense(self.action_size, activation='tanh')
 
     def call(self, x):
         x = self.dense1(x)
+        x = self.batch_norm1(x)
         x = self.dense2(x)
+        x = self.batch_norm2(x)
         action = self.action(x)
 
         return action
@@ -44,9 +48,12 @@ class Critic(Model):
     def __init__(self):
         super(Critic, self).__init__()
         self.x1 = Dense(120, activation=leaky_relu)
+        self.bn1 = BatchNormalization()
         self.x2 = Dense(240, activation=leaky_relu)
         self.a1 = Dense(240, activation=leaky_relu)
+        self.bn2 = BatchNormalization()
         self.h1 = Dense(240, activation=leaky_relu)
+        self.bn3 = BatchNormalization()
         self.q = Dense(1, activation='linear')
 
     def call(self, state_action):
@@ -54,10 +61,13 @@ class Critic(Model):
         action = state_action[1]
 
         x = self.x1(state)
+        x = self.bn1(x)
         x = self.x2(x)
         a = self.a1(action)
         h = concatenate([x, a], axis=-1)
+        h = self.bn2(h)
         x = self.h1(h)
+        x = self.bn3(x)
         q = self.q(x)
         return q
 
@@ -67,8 +77,8 @@ class DDPGagent(object):
         self.gamma = 0.99
         self.batch_size = 64
         self.buffer_size = 20000
-        self.actor_learning_rate = 0.0001
-        self.critic_learning_rate = 0.001
+        self.actor_learning_rate = 0.000001
+        self.critic_learning_rate = 0.00001
         self.tau = 0.001
 
         self.env = env
@@ -161,7 +171,7 @@ class DDPGagent(object):
             # time.sleep(0.2)
             while not done:
                 action = self.get_action(state)
-                print('Action:', action)
+                print(action)
                 noise = self.ou_noise(pre_noise, dim=self.action_dim)
                 action = np.clip(action + noise, -self.action_bound, self.action_bound)
                 next_state, reward, done, _ = self.env.step(action)
@@ -189,7 +199,7 @@ class DDPGagent(object):
                     self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
 
                     self.update_target_network(self.tau)
-                    # print(f'Actor Loss: {actor_loss}', f'Critic Loss: {critic_loss}')
+                    print(f'Actor Loss: {actor_loss}', f'Critic Loss: {critic_loss}')
 
                 pre_noise = noise
                 state = next_state

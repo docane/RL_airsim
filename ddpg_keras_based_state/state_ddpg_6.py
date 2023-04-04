@@ -28,8 +28,8 @@ class Actor(Model):
 
         self.action_size = action_dim
 
-        self.dense1 = Dense(120, activation=leaky_relu)
-        self.dense2 = Dense(240, activation=leaky_relu)
+        self.dense1 = Dense(120, activation='tanh')
+        self.dense2 = Dense(240, activation='tanh')
         self.action = Dense(self.action_size, activation='tanh')
 
     def call(self, x):
@@ -43,10 +43,10 @@ class Actor(Model):
 class Critic(Model):
     def __init__(self):
         super(Critic, self).__init__()
-        self.x1 = Dense(120, activation=leaky_relu)
-        self.x2 = Dense(240, activation=leaky_relu)
-        self.a1 = Dense(240, activation=leaky_relu)
-        self.h1 = Dense(240, activation=leaky_relu)
+        self.x1 = Dense(120, activation='tanh')
+        self.x2 = Dense(240, activation='tanh')
+        self.a1 = Dense(240, activation='tanh')
+        self.h1 = Dense(240, activation='tanh')
         self.q = Dense(1, activation='linear')
 
     def call(self, state_action):

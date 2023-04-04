@@ -201,14 +201,14 @@ class AirSimCarEnv(AirSimEnv):
         v1 = self.target_point - car_pt[:2]
         v1_norm = np.linalg.norm(v1)
         v2 = self.state['target_point']
-        dist_reward = (3 - np.linalg.norm(v2 - (self.state['linear_velocity'][:2] * 2000))) * 0.1
+        dist_reward = 1 / np.linalg.norm(v2 - (self.state['linear_velocity'][:2]))
         print('Distance Reward:', dist_reward)
         car_dir_vec = self.state['linear_velocity'][:2] / (np.linalg.norm(self.state['linear_velocity'][:2]) + 0.00001)
         # print(car_dir_vec)
         target_dir_vec = v1 / (v1_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
         theta = math.acos(ip)
-        angular_reward = 0.2 - abs(theta / np.pi)
+        angular_reward = 1 / abs(theta / np.pi)
         print('Angular Reward:', angular_reward)
 
         reward = dist_reward
@@ -233,5 +233,5 @@ class AirSimCarEnv(AirSimEnv):
         return self._get_obs()
 
 
-def gaussian(x, mean=0.0, sigma=1.0):
+def gaussian(x, mean=0.0, sigma=1.0):                                                                                                               
     return (1 / np.sqrt(2 * np.pi * sigma ** 2)) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))
