@@ -28,8 +28,8 @@ class Actor(Model):
 
         self.action_size = action_dim
 
-        self.dense1 = Dense(120, activation='tanh')
-        self.dense2 = Dense(240, activation='tanh')
+        self.dense1 = Dense(120, activation='relu')
+        self.dense2 = Dense(240, activation='relu')
         self.action = Dense(self.action_size, activation='tanh')
 
     def call(self, x):
@@ -43,10 +43,10 @@ class Actor(Model):
 class Critic(Model):
     def __init__(self):
         super(Critic, self).__init__()
-        self.x1 = Dense(120, activation='tanh')
-        self.x2 = Dense(240, activation='tanh')
-        self.a1 = Dense(240, activation='tanh')
-        self.h1 = Dense(240, activation='tanh')
+        self.x1 = Dense(120, activation='relu')
+        self.x2 = Dense(240, activation='relu')
+        self.a1 = Dense(240, activation='relu')
+        self.h1 = Dense(240, activation='relu')
         self.q = Dense(1, activation='linear')
 
     def call(self, state_action):
@@ -66,7 +66,7 @@ class DDPGagent(object):
     def __init__(self, env):
         self.gamma = 0.99
         self.batch_size = 64
-        self.buffer_size = 20000
+        self.buffer_size = 1000
         self.actor_learning_rate = 0.0001
         self.critic_learning_rate = 0.001
         self.tau = 0.001
