@@ -8,7 +8,7 @@ gym.envs.register(id='car_env-v0', entry_point='car_env_state_16:AirSimCarEnv')
 def main():
     env = gym.make('car_env-v0', ip_address='127.0.0.1')
     agent = DDPGagent(env)
-    agent.load_weights('./models/airsim_ddpg_model_2023_04_05_15_11_35/')
+    agent.load_weights('./models/airsim_ddpg_model_2023_04_06_14_46_01/')
     state = env.reset()
 
     while True:
