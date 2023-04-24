@@ -79,7 +79,7 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls = airsim.CarControls()
         self.car_state = None
 
-        self.trajectory = pd.read_csv('./data/airsim_rec_4.txt', sep='\t')
+        self.trajectory = pd.read_csv('./data/airsim_rec_2.txt', sep='\t')
         self.x = np.reshape(np.array(self.trajectory['POS_X'].values, dtype=np.float32), (-1, 1))
         self.y = np.reshape(np.array(self.trajectory['POS_Y'].values, dtype=np.float32), (-1, 1))
         self.max_x = np.max(self.x)
@@ -115,8 +115,8 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = 0
         self.car.setCarControls(self.car_controls)
 
-        self.rand = np.random.randint(0, len(self.trajectory) - 200)
-        # self.rand = 0
+        # self.rand = np.random.randint(0, len(self.trajectory) - 200)
+        self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
         self.car.simSetVehiclePose(airsim.Pose(airsim.Vector3r(randrow['POS_X'],
                                                                randrow['POS_Y'],
@@ -203,12 +203,13 @@ class AirSimCarEnv(AirSimEnv):
         v2 = self.state['target_point']
         dist_reward = 1 / (5 - np.linalg.norm(v2 - (self.state['linear_velocity'][:2]))) / 10000
         # print('Distance Reward:', dist_reward)
+
         car_dir_vec = self.state['linear_velocity'][:2] / (np.linalg.norm(self.state['linear_velocity'][:2]) + 0.00001)
         # print(car_dir_vec)
         target_dir_vec = v1 / (v1_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
         theta = math.acos(ip)
-        angular_reward = 1 / abs(theta / np.pi) / 10
+        angular_reward = 1 / (theta / np.pi) / 10
         print('Angular Reward:', angular_reward)
 
         # reward = dist_reward
