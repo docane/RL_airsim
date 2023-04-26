@@ -1,16 +1,18 @@
-import math
 import numpy as np
 import gym
 from gym import spaces
 import time
 import airsim
+import cv2 as cv
+import math
 import pandas as pd
 
 
 class AirSimEnv(gym.Env):
     metadata = {'render.modes': ['rgb_array']}
 
-    def __init__(self):
+    def __init__(self, image_shape):
+        self.observation_space = spaces.Box(0, 255, shape=image_shape, dtype=np.uint8)
         self.viewer = None
 
     def __del__(self):
@@ -33,9 +35,10 @@ class AirSimEnv(gym.Env):
 
 
 class AirSimCarEnv(AirSimEnv):
-    def __init__(self, ip_address):
-        super().__init__()
+    def __init__(self, ip_address, image_shape):
+        super().__init__(image_shape)
 
+        self.image_shape = image_shape
         self.start_ts = 0
 
         self.state = {
@@ -50,31 +53,11 @@ class AirSimCarEnv(AirSimEnv):
         }
 
         self.car = airsim.CarClient(ip=ip_address)
+        self.action_space = spaces.Box(low=-1, high=1, shape=(1,))
 
-        low = np.array(
-            [np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min],
-            dtype=np.float32)
-
-        high = np.array(
-            [np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max],
-            dtype=np.float32)
-
-        self.observation_space = spaces.Box(low, high, shape=(8,), dtype=np.float32)
-        self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+        self.image_request = airsim.ImageRequest(
+            '0', airsim.ImageType.Scene, False, False
+        )
 
         self.car_controls = airsim.CarControls()
         self.car_state = None
@@ -129,9 +112,6 @@ class AirSimCarEnv(AirSimEnv):
         self.state['target_point'][0] = self.x[5] / np.linalg.norm(self.pts[5]) * 5
         self.state['target_point'][1] = self.y[5] / np.linalg.norm(self.pts[5]) * 5
 
-        # self.car.simPause(True)
-        # self.car.simContinueForTime(2)
-
     def __del__(self):
         self.car.reset()
 
@@ -141,10 +121,22 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = float(action)
 
         self.car.setCarControls(self.car_controls)
-        # self.car.simContinueForTime(0.5)
+        time.sleep(0.1)
+
+    @staticmethod
+    def transform_obs(response):
+        img1d = np.frombuffer(response.image_data_uint8, dtype=np.uint8)
+        img1d = img1d / 255
+        img2d = np.reshape(img1d, (response.height, response.width, 3))
+        image = np.array(cv.resize(img2d, (84, 84), cv.INTER_AREA), dtype=np.float32)
+        return image
 
     def _get_obs(self):
+        responses = self.car.simGetImages([self.image_request])
+        image = self.transform_obs(responses[0])
+
         self.car_state = self.car.getCarState()
+
         kin_est = self.car_state.kinematics_estimated
 
         self.state['preposition'] = self.state['position']
@@ -193,27 +185,21 @@ class AirSimCarEnv(AirSimEnv):
         for v in self.state['next_target_point'][:2]:
             temp.append(v)
 
-        return np.array(temp)
+        return image
 
     def _compute_reward(self):
         car_pt = self.state['position'][:2]
 
-        # v1 = self.target_point - car_pt[:2]
-        v1 = self.state['next_target_point'] - car_pt[:2]
+        v1 = self.target_point - car_pt[:2]
         v1_norm = np.linalg.norm(v1)
-        v2 = self.state['next_target_point']
-        dist_reward = 1 / (5 - np.linalg.norm(v2 - (self.state['linear_velocity'][:2]))) / 10000
-        # print('Distance Reward:', dist_reward)
 
         car_dir_vec = self.state['linear_velocity'][:2] / (np.linalg.norm(self.state['linear_velocity'][:2]) + 0.00001)
-        # print(car_dir_vec)
         target_dir_vec = v1 / (v1_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
         theta = math.acos(ip)
         angular_reward = 1 / (theta / np.pi) / 10
         print('Angular Reward:', angular_reward)
 
-        # reward = dist_reward
         reward = angular_reward
 
         done = 0
@@ -228,12 +214,8 @@ class AirSimCarEnv(AirSimEnv):
         time.sleep(0.5)
         obs = self._get_obs()
         reward, done = self._compute_reward()
-        return obs, reward, done, {}
+        return obs, reward, done, self.state
 
     def reset(self):
         self._setup_car()
         return self._get_obs()
-
-
-def gaussian(x, mean=0.0, sigma=1.0):                                                                                                               
-    return (1 / np.sqrt(2 * np.pi * sigma ** 2)) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))

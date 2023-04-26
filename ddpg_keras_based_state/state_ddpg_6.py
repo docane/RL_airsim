@@ -74,7 +74,8 @@ class DDPGagent(object):
         self.env = env
         self.state_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.shape[0]
-        self.action_bound = env.action_space.high[0]
+        self.action_bound_high = env.action_space.high
+        self.action_bound_low = env.action_space.low
 
         self.actor = Actor(self.action_dim)
         self.target_actor = Actor(self.action_dim)
@@ -163,7 +164,7 @@ class DDPGagent(object):
                 action = self.get_action(state)
                 print('Action:', action)
                 noise = self.ou_noise(pre_noise, dim=self.action_dim)
-                action = np.clip(action + noise, -self.action_bound, self.action_bound)
+                action = np.clip(action + noise, self.action_bound_low, self.action_bound_high)
                 next_state, reward, done, _ = self.env.step(action)
                 # print(reward)
                 self.buffer.add_buffer(state, action, reward, next_state, done)

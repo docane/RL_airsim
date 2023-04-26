@@ -1,11 +1,21 @@
 import datetime as dt
 import numpy as np
-import cv2 as cv
 from keras.models import Model
 from keras.layers import Input, Conv2D, Flatten, Dense, concatenate
 from keras.optimizers import Adam
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
+import os
+import time
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        tf.config.experimental.set_memory_growth(gpus[0], True)
+    except RuntimeError as e:
+        # 프로그램 시작시에 메모리 증가가 설정되어야만 합니다
+        print(e)
 
 
 class Actor(Model):
@@ -33,8 +43,6 @@ class Actor(Model):
         x = self.dense2(x)
         x = self.dense3(x)
         action = self.action(x)
-
-        # action = Lambda(lambda x: self.action_bound)(action) # 이놈이 문제였음
 
         return action
 
@@ -73,8 +81,8 @@ class Critic(Model):
 class DDPGagent(object):
     def __init__(self, env):
         self.gamma = 0.99
-        self.batch_size = 128
-        self.buffer_size = 20000
+        self.batch_size = 64
+        self.buffer_size = 1000
         self.actor_learning_rate = 0.0001
         self.critic_learning_rate = 0.001
         self.tau = 0.001
@@ -89,15 +97,6 @@ class DDPGagent(object):
 
         self.actor.build(input_shape=(1, 84, 84, 3))
         self.target_actor.build(input_shape=(1, 84, 84, 3))
-
-        print(self.actor.get_weights())
-
-        self.actor.load_weights(
-            'C:/Users/Min/PycharmProjects/airsim/IL/models_2023_02_13_13_58_20/fresh_models/model_model.16-0.0171299.h5')
-        self.target_actor.load_weights(
-            'C:/Users/Min/PycharmProjects/airsim/IL/models_2023_02_13_13_58_20/fresh_models/model_model.16-0.0171299.h5')
-
-        print(self.actor.get_weights())
 
         self.critic = Critic()
         self.target_critic = Critic()
@@ -116,6 +115,7 @@ class DDPGagent(object):
 
         self.writer = tf.summary.create_file_writer(
             f'summary/airsim_ddpg_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}')
+        self.save_model_dir = f'./models/airsim_ddpg_model_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}/'
 
     def update_target_network(self, tau):
         theta = self.actor.get_weights()
@@ -130,28 +130,6 @@ class DDPGagent(object):
             target_phi[i] = tau * phi[i] + (1 - tau) * target_phi[i]
         self.target_critic.set_weights(target_phi)
 
-    def critic_learn(self, states, actions, td_targets):
-        with tf.GradientTape() as tape:
-            q = self.critic([states, actions], training=True)
-            loss = tf.reduce_mean(tf.square(q - td_targets))
-
-        grads = tape.gradient(loss, self.critic.trainable_variables)
-        self.critic_opt.apply_gradients(zip(grads, self.critic.trainable_variables))
-        return loss
-
-    def actor_learn(self, states):
-        with tf.GradientTape() as tape:
-            actions = self.actor(states, training=True)
-            critic_q = self.critic([states, actions])
-            loss = -tf.reduce_mean(critic_q)
-
-        grads = tape.gradient(loss, self.actor.trainable_variables)
-        self.actor_opt.apply_gradients(zip(grads, self.actor.trainable_variables))
-        return loss
-
-    def ou_noise(self, x, rho=0.15, mu=0, dt=1e-1, sigma=0.2, dim=1):
-        return x + rho * (mu - x) * dt + sigma * np.sqrt(dt) * np.random.normal(size=dim)
-
     def td_target(self, rewards, q_values, dones):
         y_k = np.asarray(q_values)
         for i in range(q_values.shape[0]):
@@ -161,9 +139,19 @@ class DDPGagent(object):
                 y_k[i] = rewards[i] * self.gamma * q_values[i]
         return y_k
 
+    @staticmethod
+    def ou_noise(x, rho=0.15, mu=0, dt=1e-1, sigma=0.2, dim=1):
+        return x + rho * (mu - x) * dt + sigma * np.sqrt(dt) * np.random.normal(size=dim)
+
     def load_weights(self, path):
         self.actor.load_weights(path + 'airsim_actor.h5')
         self.critic.load_weights(path + 'airsim_critic.h5')
+
+    def save_weights(self, path):
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
+        self.actor.save_weights(path + './airsim_ddpg_actor.h5')
+        self.critic.save_weights(path + './airsim_ddpg_critic.h5')
 
     def get_action(self, state):
         state = np.reshape(state, (1, 84, 84, 3))
@@ -177,23 +165,23 @@ class DDPGagent(object):
 
     def train(self, max_episode_max):
         self.update_target_network(1.0)
-        total_time = 0
+        total_step = 0
+
         for ep in range(int(max_episode_max)):
             pre_noise = np.zeros(self.action_dim)
-            time, episode_reward, done = 0, 0, False
+            step, episode_reward, done = 0, 0, False
             critic_loss, actor_loss = 0, 0
             state = self.env.reset()
-            # state = pre_processing(state)
-            while not done:
+            time.sleep(2)
 
+            while not done:
                 action = self.get_action(state)
                 noise = self.ou_noise(pre_noise, dim=self.action_dim)
                 action = np.clip(action + noise, -self.action_bound, self.action_bound)
                 next_state, reward, done, _ = self.env.step(action)
-                # next_state = pre_processing(next_state)
                 self.buffer.add_buffer(state, action, reward, next_state, done)
 
-                if self.buffer.buffer_count() > 10000:
+                if self.buffer.buffer_count() > 500:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
                     states = np.reshape(states, (-1, 84, 84, 3))
                     next_states = np.reshape(next_states, (-1, 84, 84, 3))
@@ -201,25 +189,34 @@ class DDPGagent(object):
                                                     self.target_actor(
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
                     y_i = self.td_target(rewards, target_qs.numpy(), dones)
-                    actions = np.reshape(actions, (-1, 1))
-                    critic_loss = self.critic_learn(tf.convert_to_tensor(states, dtype=tf.float32),
-                                                    tf.convert_to_tensor(actions, dtype=tf.float32),
-                                                    tf.convert_to_tensor(y_i, dtype=tf.float32))
-                    actor_loss = self.actor_learn(tf.convert_to_tensor(states, dtype=tf.float32))
+
+                    with tf.GradientTape() as tape_c:
+                        q = self.critic([states, actions], training=True)
+                        critic_loss = tf.reduce_mean(tf.square(q - y_i))
+                    critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
+                    self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
+
+                    with tf.GradientTape() as tape_a:
+                        actions = self.actor(states, training=True)
+                        critic_q = self.critic([states, actions])
+                        actor_loss = -tf.reduce_mean(critic_q)
+                    actor_grads = tape_a.gradient(actor_loss, self.actor.trainable_variables)
+                    self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
+
                     self.update_target_network(self.tau)
 
                 pre_noise = noise
                 state = next_state
                 episode_reward += reward
-                time += 1
+                step += 1
 
-            total_time += time
-            print('Episode:', ep + 1, 'Total Time:', total_time, 'Reward:', episode_reward, end=' ')
-            print('Critic Loss:', critic_loss, 'Actor Loss:', actor_loss)
+            total_step += step
+            log = f'Episode: {ep + 1}'
+            log += f' Total Time: {total_step}'
+            log += f' Reward: {round(episode_reward, 2)}'
+            log += f' Actor Loss: {actor_loss}'
+            log += f' Critic Loss: {critic_loss}'
+            print(log)
             self.save_episode_reward.append(episode_reward)
             self.draw_tensorboard(episode_reward, ep)
-
-
-def pre_processing(observe):
-    processed_observe = np.uint8(cv.resize(cv.cvtColor(observe, cv.COLOR_RGB2GRAY), (84, 84)) * 255)
-    return processed_observe
+            self.save_weights(self.save_model_dir)

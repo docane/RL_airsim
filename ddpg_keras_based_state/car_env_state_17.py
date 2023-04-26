@@ -74,7 +74,14 @@ class AirSimCarEnv(AirSimEnv):
             dtype=np.float32)
 
         self.observation_space = spaces.Box(low, high, shape=(8,), dtype=np.float32)
-        self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+
+        action_space_low = np.array(
+            [-1, 0], dtype=np.float32)
+
+        action_space_high = np.array(
+            [1, 1], dtype=np.float32)
+
+        self.action_space = spaces.Box(low=action_space_low, high=action_space_high, shape=(2,), dtype=np.float32)
 
         self.car_controls = airsim.CarControls()
         self.car_state = None
@@ -137,8 +144,8 @@ class AirSimCarEnv(AirSimEnv):
 
     def _do_action(self, action):
         self.car_controls.brake = 0
-        self.car_controls.throttle = 0.5
-        self.car_controls.steering = float(action)
+        self.car_controls.throttle = float(action[1])
+        self.car_controls.steering = float(action[0])
 
         self.car.setCarControls(self.car_controls)
         # self.car.simContinueForTime(0.5)
@@ -210,7 +217,9 @@ class AirSimCarEnv(AirSimEnv):
         target_dir_vec = v1 / (v1_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
         theta = math.acos(ip)
-        angular_reward = 1 / (theta / np.pi) / 10
+        angular_reward = 1 / (theta / np.pi) / 10 * np.linalg.norm(self.state['linear_velocity'][:2]) * 2000
+        if angular_reward < 0.001:
+            angular_reward = -0.1
         print('Angular Reward:', angular_reward)
 
         # reward = dist_reward
