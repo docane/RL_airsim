@@ -3,7 +3,6 @@ import datetime as dt
 import numpy as np
 from keras.models import Model
 from keras.layers import Input, Dense, concatenate
-from keras.activations import leaky_relu
 from keras.optimizers import Adam
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
