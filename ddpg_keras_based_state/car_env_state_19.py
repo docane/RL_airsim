@@ -234,13 +234,14 @@ class AirSimCarEnv(AirSimEnv):
         if heading_difference > math.pi:
             heading_difference = 2 * math.pi - heading_difference
 
-        speed = np.linalg.norm(self.state['linear_velocity']) * self.velocity_divide
+        speed = np.linalg.norm(self.state['linear_velocity'])
         dist = np.array([math.sqrt(((car_pt[0] - self.pts[i][0]) ** 2) + ((car_pt[1] - self.pts[i][1]) ** 2)) for i in
                          range(len(self.pts))])
         min_dist = np.min(dist)
         print('Head Diff:', heading_difference)
         print('Minimum Distance:', min_dist)
-        reward = math.cos(heading_difference) - math.sin(heading_difference) - abs(min_dist)
+        reward = speed * math.cos(heading_difference) - speed * math.sin(heading_difference) - abs(
+            min_dist) - speed * abs(min_dist)
         print('Total Reward:', reward)
 
         done = 0
@@ -262,5 +263,5 @@ class AirSimCarEnv(AirSimEnv):
         return self._get_obs()
 
 
-def gaussian(x, mean=0.0, sigma=1.0):                                                                                                               
+def gaussian(x, mean=0.0, sigma=1.0):
     return (1 / np.sqrt(2 * np.pi * sigma ** 2)) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))
