@@ -47,13 +47,14 @@ class AirSimCarEnv(AirSimEnv):
             'angular_velocity': np.zeros(3),
             'target_point': np.zeros(2),
             'next_target_point': np.zeros(2),
-            'track_distance': np.zeros(1)
+            'target_point_distance': np.zeros(1)
         }
 
         self.car = airsim.CarClient(ip=ip_address)
 
         low = np.array(
             [np.finfo(np.float32).min,
+             np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
@@ -71,10 +72,11 @@ class AirSimCarEnv(AirSimEnv):
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
+             np.finfo(np.float32).max,
              np.finfo(np.float32).max],
             dtype=np.float32)
 
-        self.observation_space = spaces.Box(low, high, shape=(8,), dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(9,), dtype=np.float32)
 
         action_space_low = np.array(
             [-1, 0], dtype=np.float32)
@@ -169,23 +171,52 @@ class AirSimCarEnv(AirSimEnv):
         self.state['collision'] = self.car.simGetCollisionInfo().has_collided
 
         car_pt = self.state['position'][:2]
-
-        # 도로와의 거리
         dist = np.array([math.sqrt(((car_pt[0] - self.pts[i][0]) ** 2) + ((car_pt[1] - self.pts[i][1]) ** 2)) for i in
                          range(len(self.pts))])
-
-        # 가장 가까운 도로의 인덱스
         min_dist_index = np.argmin(dist)
+        min_dist_temp_index = 0
+        for i in range(len(self.temp)):
+            if min_dist_index < self.temp[i]:
+                min_dist_temp_index = i
+                break
+        route_point = [index for index in range(min_dist_temp_index, min_dist_temp_index + 5)]
+        # print(route_point)
+        target_point = np.array(
+            [(self.x[self.temp[route_point[1]]][0] + car_pt[0]) / 2,
+             (self.y[self.temp[route_point[1]]][0] + car_pt[1]) / 2])
+        # print(self.temp[route_point[1]])
+        # print('Target Point:', target_point)
+        target_point_dist = ((car_pt[0] - self.state['target_point'][0]) ** 2) + (
+                (car_pt[1] - self.state['target_point'][1]) ** 2)
 
-        # 차량의 바로 뒤에 있는 포인트의 인덱스
+        self.state['target_point'][0] = self.state['next_target_point'][0]
+        self.state['target_point'][1] = self.state['next_target_point'][1]
+        self.state['next_target_point'][0] = target_point[0]
+        self.state['next_target_point'][1] = target_point[1]
+
+        temp = []
+        for v in self.state['position'][:2]:
+            temp.append(v)
+        temp.append(self.state['pose'][2])
+        for v in self.state['linear_velocity'][:2]:
+            temp.append(v)
+        temp.append(self.state['angular_velocity'][2])
+        for v in self.state['next_target_point'][:2]:
+            temp.append(v)
+        temp.append(target_point_dist)
+
         min_dist_temp_index = 0
         for i in range(len(self.temp)):
             if min_dist_index < self.temp[i]:
                 min_dist_temp_index = i - 1
                 break
 
-        # 차량 앞 뒤 포인트의 인덱스 리스트
         route_point = [index for index in range(min_dist_temp_index, min_dist_temp_index + 2)]
+
+        # print(car_pt[0] - self.x[self.temp[route_point[0]]][0])
+        # print(car_pt[1] - self.y[self.temp[route_point[0]]][0])
+        # print(car_pt[0] - self.x[self.temp[route_point[1]]][0])
+        # print(car_pt[1] - self.y[self.temp[route_point[1]]][0])
 
         # 바로 뒤에 있는 타겟 포인트
         self.first_target_point = np.array(
@@ -197,49 +228,51 @@ class AirSimCarEnv(AirSimEnv):
             [self.x[self.temp[route_point[1]]][0],
              self.y[self.temp[route_point[1]]][0]]
         )
-
-        target_dir_vec = (self.second_target_point - self.first_target_point) / np.linalg.norm(
-            self.first_target_point - self.second_target_point)
-        car_dir_vec = self.state['linear_velocity'][:2] / (np.linalg.norm(self.state['linear_velocity'][:2]) + 0.0000001)
+        # print((self.second_target_point - self.first_target_point) / np.linalg.norm(self.first_target_point - self.second_target_point))
+        # print(self.state['linear_velocity'][:2] / np.linalg.norm(self.state['linear_velocity'][:2]))
+        target_dir_vec = (self.second_target_point - self.first_target_point) / np.linalg.norm(self.first_target_point - self.second_target_point)
+        car_dir_vec = self.state['linear_velocity'][:2] / np.linalg.norm(self.state['linear_velocity'][:2])
         ip = car_dir_vec[0] * target_dir_vec[1] - car_dir_vec[1] * target_dir_vec[0]
         theta = math.asin(ip)
-        self.state['angle'] = theta
+        # print(theta)
 
         min_dist = np.min(dist)
+
         if self.pts[min_dist_index][1] < car_pt[1]:
-            pass
+            print('오른쪽')
         else:
             if self.pts[min_dist_index][0] < car_pt[0]:
-                pass
+                print('오른쪽')
             else:
+                print('왼쪽')
                 min_dist = -min_dist
-        self.state['track_distance'] = min_dist
+        print(min_dist)
 
-        temp = []
-        for v in self.state['position'][:2]:
-            temp.append(v)
-        temp.append(self.state['pose'][2])
-        for v in self.state['linear_velocity'][:2]:
-            temp.append(v)
-        temp.append(self.state['angular_velocity'][2])
-        temp.append(self.state['angle'] / np.pi)
-        temp.append(self.state['track_distance'])
+        print(self.state)
 
         return np.array(temp)
 
     def _compute_reward(self):
-        velocity = np.linalg.norm(self.state['linear_velocity'])
-        angle = self.state['angle']
-        track_pos = self.state['track_distance']
-        reward = 100 * velocity * np.cos(angle) - 10 * velocity * np.sin(angle) - 10 * track_pos - 100 * velocity * track_pos
-        print('Vxcos(theta):', velocity * np.cos(angle))
-        print('Vxsin(theta):', velocity * np.sin(angle))
-        print('tp:', track_pos)
-        print('Vxtp:', velocity * track_pos)
-        print(reward)
+        car_pt = self.state['position'][:2]
+
+        dist_reward = 1 / (np.linalg.norm(car_pt - (self.state['target_point']))) / 1000
+        # print('Car Point:', car_pt)
+        # print('Distance Reward:', dist_reward)
+
+        v1 = self.state['target_point'] - car_pt[:2]
+        v1_norm = np.linalg.norm(v1)
+        car_dir_vec = self.state['linear_velocity'][:2] / (np.linalg.norm(self.state['linear_velocity'][:2]) + 0.00001)
+        target_dir_vec = v1 / (v1_norm + 0.00001)
+        ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
+        theta = math.acos(ip)
+        angular_reward = (1 / (theta / np.pi) / 10)
+        # print('Angular Reward:', angular_reward)
+
+        reward = dist_reward
+        reward += angular_reward
         done = 0
         if self.state['collision']:
-            reward -= 0.01
+            reward -= 1
             done = 1
 
         return reward, done

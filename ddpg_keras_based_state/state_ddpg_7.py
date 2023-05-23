@@ -4,6 +4,7 @@ import numpy as np
 from keras.models import Model
 from keras.layers import Input, Dense, concatenate
 from keras.optimizers import Adam
+from keras.initializers.initializers_v1 import RandomUniform
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
 import os
@@ -27,8 +28,8 @@ class Actor(Model):
 
         self.dense1 = Dense(120, activation='relu')
         self.dense2 = Dense(240, activation='relu')
-        self.steering = Dense(1, activation='tanh')
-        self.throttle = Dense(1, activation='sigmoid')
+        self.steering = Dense(1, activation='tanh', kernel_initializer=RandomUniform(-1e-3, 1e-3))
+        self.throttle = Dense(1, activation='sigmoid', kernel_initializer=RandomUniform(-1e-3, 1e-3))
 
     def call(self, x):
         x = self.dense1(x)
@@ -162,7 +163,8 @@ class DDPGagent(object):
             # time.sleep(0.2)
             while not done:
                 action = self.get_action(state)
-                print('Action:', action)
+                # print('State:', state)
+                # print('Action:', action)
                 noise = self.ou_noise(pre_noise, dim=self.action_dim)
                 action = np.clip(action + noise, self.action_bound_low, self.action_bound_high)
                 next_state, reward, done, _ = self.env.step(action)

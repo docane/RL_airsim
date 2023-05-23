@@ -218,5 +218,5 @@ class DDPGagent(object):
             log += f' Critic Loss: {critic_loss}'
             print(log)
             self.save_episode_reward.append(episode_reward)
-            self.draw_tensorboard(episode_reward, ep)
-            self.save_weights(self.save_model_dir)
+            # self.draw_tensorboard(episode_reward, ep)
+            # self.save_weights(self.save_model_dir)

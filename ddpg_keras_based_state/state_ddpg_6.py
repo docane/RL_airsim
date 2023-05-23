@@ -175,18 +175,18 @@ class DDPGagent(object):
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
                     y_i = self.td_target(rewards, target_qs.numpy(), dones)
 
-                    with tf.GradientTape() as tape_c:
-                        q = self.critic([states, actions], training=True)
-                        critic_loss = tf.reduce_mean(tf.square(q - y_i))
-                    critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
-                    self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
-
                     with tf.GradientTape() as tape_a:
                         actions = self.actor(states, training=True)
                         critic_q = self.critic([states, actions])
                         actor_loss = -tf.reduce_mean(critic_q)
                     actor_grads = tape_a.gradient(actor_loss, self.actor.trainable_variables)
                     self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
+
+                    with tf.GradientTape() as tape_c:
+                        q = self.critic([states, actions], training=True)
+                        critic_loss = tf.reduce_mean(tf.square(q - y_i))
+                    critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
+                    self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
 
                     self.update_target_network(self.tau)
                     # print(f'Actor Loss: {actor_loss}', f'Critic Loss: {critic_loss}')
