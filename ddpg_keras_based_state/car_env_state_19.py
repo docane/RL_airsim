@@ -231,7 +231,7 @@ class AirSimCarEnv(AirSimEnv):
         velocity = np.linalg.norm(self.state['linear_velocity'])
         angle = self.state['angle']
         track_pos = self.state['track_distance']
-        reward = 100 * velocity * np.cos(angle) - 10 * velocity * np.sin(angle) - 10 * track_pos - 100 * velocity * track_pos
+        reward = 100 * velocity * np.cos(angle) - 10 * velocity * np.sin(abs(angle)) - 10 * track_pos - 100 * velocity * track_pos
         print('Vxcos(theta):', velocity * np.cos(angle))
         print('Vxsin(theta):', velocity * np.sin(angle))
         print('tp:', track_pos)
@@ -246,7 +246,7 @@ class AirSimCarEnv(AirSimEnv):
 
     def step(self, action):
         self._do_action(action)
-        time.sleep(0.5)
+        # time.sleep(0.5)
         obs = self._get_obs()
         reward, done = self._compute_reward()
         return obs, reward, done, {}

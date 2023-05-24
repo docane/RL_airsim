@@ -4,6 +4,7 @@ import numpy as np
 from keras.models import Model
 from keras.layers import Input, Dense, concatenate
 from keras.optimizers import Adam
+from keras.initializers.initializers_v1 import RandomUniform
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
 import os
@@ -161,7 +162,7 @@ class DDPGagent(object):
             # time.sleep(0.2)
             while not done:
                 action = self.get_action(state)
-                print('Action:', action)
+                # print('Action:', action)
                 noise = self.ou_noise(pre_noise, dim=self.action_dim)
                 action = np.clip(action + noise, self.action_bound_low, self.action_bound_high)
                 next_state, reward, done, _ = self.env.step(action)
@@ -175,6 +176,7 @@ class DDPGagent(object):
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
                     y_i = self.td_target(rewards, target_qs.numpy(), dones)
 
+                    # 액터 신경망 업데이트
                     with tf.GradientTape() as tape_a:
                         actions = self.actor(states, training=True)
                         critic_q = self.critic([states, actions])
@@ -182,6 +184,7 @@ class DDPGagent(object):
                     actor_grads = tape_a.gradient(actor_loss, self.actor.trainable_variables)
                     self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
 
+                    # 크리틱 신경망 업데이트
                     with tf.GradientTape() as tape_c:
                         q = self.critic([states, actions], training=True)
                         critic_loss = tf.reduce_mean(tf.square(q - y_i))
@@ -189,7 +192,6 @@ class DDPGagent(object):
                     self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
 
                     self.update_target_network(self.tau)
-                    # print(f'Actor Loss: {actor_loss}', f'Critic Loss: {critic_loss}')
 
                 pre_noise = noise
                 state = next_state
@@ -204,8 +206,8 @@ class DDPGagent(object):
             log += f' Critic Loss: {critic_loss}'
             print(log)
             self.save_episode_reward.append(episode_reward)
-            self.draw_tensorboard(episode_reward, ep)
-            self.save_weights(self.save_model_dir)
+            # self.draw_tensorboard(episode_reward, ep)
+            # self.save_weights(self.save_model_dir)
 
             # if ep % 100 == 99:
             #     del self.env
