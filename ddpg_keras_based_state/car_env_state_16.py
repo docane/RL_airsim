@@ -118,13 +118,14 @@ class AirSimCarEnv(AirSimEnv):
         self.rand = np.random.randint(0, len(self.trajectory) - 200)
         # self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
-        self.car.simSetVehiclePose(airsim.Pose(airsim.Vector3r(randrow['POS_X'],
-                                                               randrow['POS_Y'],
-                                                               randrow['POS_Z']),
-                                               airsim.Quaternionr(randrow['Q_X'],
-                                                                  randrow['Q_Y'],
-                                                                  randrow['Q_Z'],
-                                                                  randrow['Q_W'])), True)
+        self.car.simSetVehiclePose(
+            airsim.Pose(airsim.Vector3r(randrow['POS_X'],
+                                        randrow['POS_Y'],
+                                        randrow['POS_Z']),
+                        airsim.Quaternionr(randrow['Q_X'],
+                                           randrow['Q_Y'],
+                                           randrow['Q_Z'],
+                                           randrow['Q_W'])), True)
 
         self.state['target_point'][0] = self.x[5] / np.linalg.norm(self.pts[5]) * 5
         self.state['target_point'][1] = self.y[5] / np.linalg.norm(self.pts[5]) * 5
@@ -235,5 +236,5 @@ class AirSimCarEnv(AirSimEnv):
         return self._get_obs()
 
 
-def gaussian(x, mean=0.0, sigma=1.0):                                                                                                               
+def gaussian(x, mean=0.0, sigma=1.0):
     return (1 / np.sqrt(2 * np.pi * sigma ** 2)) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))

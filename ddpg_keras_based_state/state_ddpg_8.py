@@ -1,4 +1,3 @@
-import time
 import datetime as dt
 import numpy as np
 from keras.models import Model
@@ -63,9 +62,9 @@ class DDPGagent(object):
         self.gamma = 0.99
         self.batch_size = 64
         self.buffer_size = 1000
-        self.actor_learning_rate = 0.0001
-        self.critic_learning_rate = 0.001
-        self.tau = 0.001
+        self.actor_learning_rate = 0.00001
+        self.critic_learning_rate = 0.0001
+        self.tau = 0.01
 
         self.env = env
         self.state_dim = env.observation_space.shape[0]
@@ -140,6 +139,7 @@ class DDPGagent(object):
     def get_action(self, state):
         action = self.actor(tf.convert_to_tensor([state], dtype=tf.float32))
         action = action.numpy()[0]
+        action = np.clip(action, self.action_bound_low, self.action_bound_high)
         return action
 
     def draw_tensorboard(self, score, e):
@@ -163,10 +163,21 @@ class DDPGagent(object):
 
                 if self.buffer.buffer_count() > 500:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
+                    print(rewards)
+
                     target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
                                                     self.target_actor(
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
+                    print(target_qs)
                     y_i = self.td_target(rewards, target_qs.numpy(), dones)
+
+                    # 크리틱 신경망 업데이트
+                    with tf.GradientTape() as tape_c:
+                        q = self.critic([states, actions], training=True)
+                        critic_loss = tf.reduce_mean(tf.square(q - y_i))
+                    critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
+                    critic_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in critic_grads]
+                    self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
 
                     # 액터 신경망 업데이트
                     with tf.GradientTape() as tape_a:
@@ -174,14 +185,8 @@ class DDPGagent(object):
                         critic_q = self.critic([states, actions])
                         actor_loss = -tf.reduce_mean(critic_q)
                     actor_grads = tape_a.gradient(actor_loss, self.actor.trainable_variables)
+                    actor_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in actor_grads]
                     self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
-
-                    # 크리틱 신경망 업데이트
-                    with tf.GradientTape() as tape_c:
-                        q = self.critic([states, actions], training=True)
-                        critic_loss = tf.reduce_mean(tf.square(q - y_i))
-                    critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
-                    self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
 
                     self.update_target_network(self.tau)
 

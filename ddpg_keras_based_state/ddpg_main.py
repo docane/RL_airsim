@@ -1,7 +1,7 @@
 import gym
-from state_ddpg_6 import DDPGagent
+from state_ddpg_8 import DDPGagent
 
-gym.envs.register(id='car_env-v0', entry_point='car_env_state_16_1:AirSimCarEnv')
+gym.envs.register(id='car_env-v0', entry_point='car_env_state_16_3:AirSimCarEnv')
 
 
 def main():
