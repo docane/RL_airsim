@@ -115,8 +115,8 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = 0
         self.car.setCarControls(self.car_controls)
 
-        # self.rand = np.random.randint(0, len(self.trajectory) - 200)
-        self.rand = len(self.trajectory) - 200
+        self.rand = np.random.randint(0, len(self.trajectory) - 200)
+        # self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
         self.car.simSetVehiclePose(
             airsim.Pose(airsim.Vector3r(randrow['POS_X'],
@@ -219,7 +219,7 @@ class AirSimCarEnv(AirSimEnv):
 
         done = 0
         if self.state['collision']:
-            # reward -= 1
+            # reward -= 0.1
             done = 1
 
         return reward, done

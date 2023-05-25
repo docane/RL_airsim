@@ -12,7 +12,7 @@ def main():
     # agent.load_weights('./models/airsim_ddpg_model_2023_04_05_13_11_57/')
     # agent.load_weights('./models/airsim_ddpg_model_2023_05_09_15_05_55/')
     # agent.load_weights('./models/airsim_ddpg_model_2023_05_24_15_10_24/')
-    agent.load_weights('./models/airsim_ddpg_model_2023_05_24_22_02_32/')
+    agent.load_weights('./models/airsim_ddpg_model_2023_05_25_15_18_45/')
 
     state = env.reset()
 

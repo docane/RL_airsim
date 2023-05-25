@@ -62,9 +62,9 @@ class DDPGagent(object):
         self.gamma = 0.99
         self.batch_size = 64
         self.buffer_size = 1000
-        self.actor_learning_rate = 0.00001
-        self.critic_learning_rate = 0.0001
-        self.tau = 0.01
+        self.actor_learning_rate = 0.0001
+        self.critic_learning_rate = 0.001
+        self.tau = 0.001
 
         self.env = env
         self.state_dim = env.observation_space.shape[0]
