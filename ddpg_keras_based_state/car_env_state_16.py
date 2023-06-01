@@ -115,8 +115,8 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = 0
         self.car.setCarControls(self.car_controls)
 
-        self.rand = np.random.randint(0, len(self.trajectory) - 200)
-        # self.rand = 0
+        # self.rand = np.random.randint(0, len(self.trajectory) - 200)
+        self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
         self.car.simSetVehiclePose(
             airsim.Pose(airsim.Vector3r(randrow['POS_X'],
@@ -166,6 +166,7 @@ class AirSimCarEnv(AirSimEnv):
         dist = np.array([math.sqrt(((car_pt[0] - self.pts[i][0]) ** 2) + ((car_pt[1] - self.pts[i][1]) ** 2)) for i in
                          range(len(self.pts))])
         min_dist_index = np.argmin(dist)
+        print(min_dist_index)
         min_dist_temp_index = 0
         for i in range(len(self.temp)):
             if min_dist_index < self.temp[i]:
