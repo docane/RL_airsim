@@ -131,7 +131,7 @@ class AirSimCarEnv(AirSimEnv):
             start_index = randint
         else:
             self.direction = 1
-            start_index = randint - 1885
+            start_index = randint
         start_row = self.trajectory.iloc[start_index]
         self.car.simSetVehiclePose(
             airsim.Pose(airsim.Vector3r(start_row['POS_X'],
@@ -269,9 +269,7 @@ class AirSimCarEnv(AirSimEnv):
         target_dir_vec = v1 / (v1_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
         theta = math.acos(ip)
-        # if self.direction == 1:
-        #     theta = np.pi - theta
-        angular_reward = (1 / (theta / np.pi) / 100)
+        angular_reward = (1 / (theta / np.pi) / 10)
         print('Angular Reward:', angular_reward)
 
         reward = angular_reward

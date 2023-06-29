@@ -119,7 +119,7 @@ class AirSimCarEnv(AirSimEnv):
         self.car.setCarControls(self.car_controls)
 
         # self.rand = np.random.randint(0, len(self.trajectory) - 200)
-        self.rand = 520
+        self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
         self.car.simSetVehiclePose(
             airsim.Pose(airsim.Vector3r(randrow['POS_X'],
@@ -130,12 +130,6 @@ class AirSimCarEnv(AirSimEnv):
                                            randrow['Q_Z'],
                                            randrow['Q_W'])), True)
 
-        self.state['target_point'][0] = self.x[5] / np.linalg.norm(self.pts[5]) * 5
-        self.state['target_point'][1] = self.y[5] / np.linalg.norm(self.pts[5]) * 5
-
-        # self.car.simPause(True)
-        # self.car.simContinueForTime(2)
-
     def __del__(self):
         self.car.reset()
 
@@ -145,7 +139,6 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = float(action)
 
         self.car.setCarControls(self.car_controls)
-        # self.car.simContinueForTime(0.5)
 
     def _get_obs(self):
         self.car_state = self.car.getCarState()
@@ -171,7 +164,6 @@ class AirSimCarEnv(AirSimEnv):
                          range(len(self.pts))])
 
         min_dist_index = np.argmin(dist)
-        print(min_dist_index)
 
         min_dist_temp_index = 0
 
@@ -228,21 +220,14 @@ class AirSimCarEnv(AirSimEnv):
         car_pt = self.state['position'][:2]
 
         v1 = self.target_point - car_pt[:2]
-        # v1 = self.state['next_target_point'] - car_pt[:2]
         v1_norm = np.linalg.norm(v1)
-        v2 = self.state['next_target_point']
-        dist_reward = 1 / (5 - np.linalg.norm(v2 - (self.state['linear_velocity'][:2]))) / 10000
-        # print('Distance Reward:', dist_reward)
-
         car_dir_vec = self.state['linear_velocity'][:2] / (np.linalg.norm(self.state['linear_velocity'][:2]) + 0.00001)
-        # print(car_dir_vec)
         target_dir_vec = v1 / (v1_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
         theta = math.acos(ip)
         angular_reward = (1 / (theta / np.pi) / 10)
         print('Angular Reward:', angular_reward)
 
-        # reward = dist_reward
         reward = angular_reward
 
         done = 0
@@ -254,7 +239,7 @@ class AirSimCarEnv(AirSimEnv):
 
     def step(self, action):
         self._do_action(action)
-        # time.sleep(0.5)
+        time.sleep(0.5)
         obs = self._get_obs()
         reward, done = self._compute_reward()
         return obs, reward, done, {}

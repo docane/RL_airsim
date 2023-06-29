@@ -2,7 +2,7 @@ import gym
 from state_ddpg_10 import DDPGagent
 import tensorflow as tf
 
-gym.envs.register(id='car_env-v0', entry_point='car_env_state_16_7:AirSimCarEnv')
+gym.envs.register(id='car_env-v0', entry_point='car_env_state_16_12:AirSimCarEnv')
 
 
 def main():
@@ -19,7 +19,9 @@ def main():
     # agent.load_weights('./models/airsim_ddpg_model_2023_05_27_02_25_46/')
     # agent.load_weights('./models/airsim_ddpg_model_2023_05_31_17_08_55/')
     # agent.load_weights('./models/airsim_ddpg_model_2023_05_31_21_43_03/')
-    agent.load_weights('./models/airsim_ddpg_model_2023_06_01_13_53_19/')
+    # agent.load_weights('./models/airsim_ddpg_model_2023_06_01_13_53_19/')
+    # agent.load_weights('./models/airsim_ddpg_model_2023_06_02_12_49_09/')
+    agent.load_weights('./models/airsim_ddpg_model_2023_06_28_14_18_23/')
 
     state = env.reset()
 
