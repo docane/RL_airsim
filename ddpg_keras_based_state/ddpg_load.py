@@ -2,7 +2,7 @@ import gym
 from state_ddpg_10 import DDPGagent
 import tensorflow as tf
 
-gym.envs.register(id='car_env-v0', entry_point='car_env_state_16_12:AirSimCarEnv')
+gym.envs.register(id='car_env-v0', entry_point='car_env_state_16_14:AirSimCarEnv')
 
 
 def main():
@@ -22,15 +22,17 @@ def main():
     # agent.load_weights('./models/airsim_ddpg_model_2023_06_01_13_53_19/')
     # agent.load_weights('./models/airsim_ddpg_model_2023_06_02_12_49_09/')
     agent.load_weights('./models/airsim_ddpg_model_2023_06_28_14_18_23/')
+    # agent.load_weights('./models/airsim_ddpg_model_2023_07_05_15_05_02/')
+    # agent.load_weights('./models/airsim_ddpg_model_2023_07_05_21_14_29/')
 
     state = env.reset()
 
     while True:
         action = agent.actor(tf.convert_to_tensor([state], dtype=tf.float32)).numpy()[0]
         state, reward, done, _ = env.step(action)
-        if done:
-            state = env.reset()
-            break
+        # if done:
+            # state = env.reset()
+            # break
             # continue
 
 
