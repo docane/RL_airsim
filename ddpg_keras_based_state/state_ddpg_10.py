@@ -94,8 +94,6 @@ class DDPGagent(object):
 
         self.buffer = ReplayBuffer(self.buffer_size)
 
-        self.save_episode_reward = []
-
         self.writer = tf.summary.create_file_writer(
             f'summary/airsim_ddpg_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}')
         self.save_model_dir = f'./models/airsim_ddpg_model_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}/'
@@ -199,7 +197,6 @@ class DDPGagent(object):
             log += f' Actor Loss: {actor_loss}'
             log += f' Critic Loss: {critic_loss}'
             print(log)
-            self.save_episode_reward.append(episode_reward)
             self.draw_tensorboard(episode_reward, ep)
             self.save_weights(self.save_model_dir)
 
