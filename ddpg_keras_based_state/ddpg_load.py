@@ -21,9 +21,9 @@ def main():
     # agent.load_weights('./models/airsim_ddpg_model_2023_05_31_21_43_03/')
     # agent.load_weights('./models/airsim_ddpg_model_2023_06_01_13_53_19/')
     # agent.load_weights('./models/airsim_ddpg_model_2023_06_02_12_49_09/')
-    agent.load_weights('./models/airsim_ddpg_model_2023_06_28_14_18_23/')
+    # agent.load_weights('./models/airsim_ddpg_model_2023_06_28_14_18_23/')
     # agent.load_weights('./models/airsim_ddpg_model_2023_07_05_15_05_02/')
-    # agent.load_weights('./models/airsim_ddpg_model_2023_07_05_21_14_29/')
+    agent.load_weights('./models/airsim_ddpg_model_2023_07_05_21_14_29/')
 
     state = env.reset()
 

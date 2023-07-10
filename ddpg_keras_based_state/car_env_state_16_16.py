@@ -4,6 +4,7 @@ from gym import spaces
 import time
 import airsim
 import pandas as pd
+from airsim import Vector3r
 import sys
 
 
@@ -104,6 +105,8 @@ class AirSimCarEnv(AirSimEnv):
             distance = np.linalg.norm(self.pts[i] - self.pts[self.temp[-1]])
             if distance > (5 / 2000):
                 self.temp.append(i)
+
+        self.car.simPlotLineStrip(points=[Vector3r(x, y, z+0.5) for x, y, z in self.pts_1], is_persistent=True)
 
     def _car_position_init(self, index):
         while True:
