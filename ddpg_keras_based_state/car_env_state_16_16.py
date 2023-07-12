@@ -97,7 +97,7 @@ class AirSimCarEnv(AirSimEnv):
         self.velocity_divide = 2000
 
         self.pts = np.column_stack((x, y))
-        self.pts_1 = np.column_stack((pos_x, pos_y, pos_z))
+        self.pts_1 = np.column_stack((pos_x.astype(float), pos_y.astype(float), pos_z.astype(float)))
         self.temp = [0]
 
         # 5m 단위로 경로 포인트 잡기
@@ -107,32 +107,18 @@ class AirSimCarEnv(AirSimEnv):
                 self.temp.append(i)
 
         self.car.simPlotLineStrip(points=[Vector3r(x, y, z+0.5) for x, y, z in self.pts_1], is_persistent=True)
-
-    def _car_position_init(self, index):
-        while True:
-            row = self.trajectory.iloc[index]
-            self.car.simSetVehiclePose(
-                airsim.Pose(airsim.Vector3r(row['POS_X'],
-                                            row['POS_Y'],
-                                            row['POS_Z']),
-                            airsim.Quaternionr(row['Q_X'],
-                                               row['Q_Y'],
-                                               row['Q_Z'],
-                                               row['Q_W'])), True)
-
-            time.sleep(0.1)
-            car_pt = self.car.getCarState().kinematics_estimated.position.to_numpy_array()
-            min_dist = min(np.linalg.norm((self.pts_1 - car_pt), axis=1))
-            if min_dist < 1:
-                break
+        self._success = False
 
     def _setup_car(self):
         self.car.reset()
         self.car.enableApiControl(True)
         self.car.armDisarm(True)
 
-        rand = np.random.randint(0, len(self.trajectory) - 200)
-        self._car_position_init(rand)
+        if self._success:
+            start_index = 0
+        else:
+            start_index = np.random.randint(0, len(self.trajectory) - 200)
+        self._car_position_init(start_index)
         self._do_action(0)
 
     def __del__(self):
@@ -166,17 +152,6 @@ class AirSimCarEnv(AirSimEnv):
 
         dist = np.linalg.norm(self.pts - car_pt, axis=1)
         min_dist_index = dist.argmin()
-
-        if min_dist_index > 770:
-            self._car_position_init(0)
-            self.target_point = np.array(
-                [(self.pts[self.temp[1]][0] + car_pt[0]) / 2,
-                 (self.pts[self.temp[1]][1] + car_pt[1]) / 2])
-            v1 = self.target_point - car_pt[:2]
-            v1_norm = np.linalg.norm(v1)
-            v2 = (v1 / v1_norm) * 5
-            self.state['target_point'][0] = v2[0]
-            self.state['target_point'][1] = v2[1]
 
         min_dist_temp_index = 0
 
@@ -252,7 +227,7 @@ class AirSimCarEnv(AirSimEnv):
         reward = angular_reward
         reward += distance_reward
 
-        done = 0
+        done = self._check_done()
         if self.state['collision']:
             # reward -= 0.1
             self.count = 0
@@ -271,6 +246,37 @@ class AirSimCarEnv(AirSimEnv):
         self._setup_car()
         time.sleep(2)
         return self._get_obs()
+
+    def _car_position_init(self, index):
+        while True:
+            row = self.trajectory.iloc[index]
+            self.car.simSetVehiclePose(
+                airsim.Pose(airsim.Vector3r(row['POS_X'],
+                                            row['POS_Y'],
+                                            row['POS_Z']),
+                            airsim.Quaternionr(row['Q_X'],
+                                               row['Q_Y'],
+                                               row['Q_Z'],
+                                               row['Q_W'])), True)
+
+            time.sleep(0.1)
+            car_pt = self.car.getCarState().kinematics_estimated.position.to_numpy_array()
+            min_dist = min(np.linalg.norm((self.pts_1 - car_pt), axis=1))
+            if min_dist < 1:
+                break
+
+    def _check_done(self):
+        car_pt = self.state['position'][:2]
+
+        dist = np.linalg.norm(self.pts - car_pt, axis=1)
+        min_dist_index = dist.argmin()
+
+        if min_dist_index > 770:
+            self._success = True
+            return True
+        else:
+            self._success = False
+            return False
 
 
 def gaussian(x, mean=0.0, sigma=1.0):

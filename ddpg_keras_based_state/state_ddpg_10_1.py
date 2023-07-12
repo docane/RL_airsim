@@ -64,7 +64,7 @@ class DDPGagent(object):
         self.buffer_size = 1000
         self.actor_learning_rate = 0.0001
         self.critic_learning_rate = 0.001
-        self.tau = 0.001
+        self.tau = 0.0001
 
         self.env = env
         self.state_dim = env.observation_space.shape[0]
@@ -146,6 +146,7 @@ class DDPGagent(object):
     def train(self, max_episode_max):
         self.update_target_network(1.0)
         total_time = 0
+        step_avg = 0
         for ep in range(int(max_episode_max)):
             pre_noise = np.zeros(self.action_dim)
             step, episode_reward, done = 0, 0, False
@@ -191,14 +192,20 @@ class DDPGagent(object):
                 step += 1
 
             total_time += step
+            step_avg = 0.9 * step_avg + 0.1 * step if step_avg != 0 else step
             log = f'Episode: {ep + 1}'
+            log += f' Step: {step}'
             log += f' Total Time: {total_time}'
+            log += f' Avg Step: {step_avg}'
             log += f' Reward: {round(episode_reward, 2)}'
             log += f' Actor Loss: {actor_loss}'
             log += f' Critic Loss: {critic_loss}'
             print(log)
             self.draw_tensorboard(episode_reward, ep)
             self.save_weights(self.save_model_dir)
+
+            if step_avg > 1000:
+                break
 
             # if ep % 100 == 99:
             #     del self.env
