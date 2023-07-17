@@ -43,13 +43,17 @@ class AirSimCarEnv(AirSimEnv):
             'position': np.zeros(3),
             'pose': np.zeros(3),
             'prepose': np.zeros(3),
-            'speed': np.zeros(1)
+            'linear_velocity': np.zeros(2),
+            'angular_velocity': np.zeros(2)
         }
 
         self.car = airsim.CarClient(ip=ip_address)
 
         low = np.array(
             [np.finfo(np.float32).min,
+             np.finfo(np.float32).min,
+             np.finfo(np.float32).min,
+             np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min],
@@ -59,16 +63,19 @@ class AirSimCarEnv(AirSimEnv):
             [np.finfo(np.float32).max,
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
+             np.finfo(np.float32).max,
+             np.finfo(np.float32).max,
+             np.finfo(np.float32).max,
              np.finfo(np.float32).max],
             dtype=np.float32)
 
-        self.observation_space = spaces.Box(low, high, shape=(4,), dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(7,), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
         self.car_controls = airsim.CarControls()
         self.car_state = None
 
-        self.trajectory = pd.read_csv('data/airsim_rec_1.txt', sep='\t')
+        self.trajectory = pd.read_csv('data/airsim_rec_2.txt', sep='\t')
         self.x = np.reshape(np.array(self.trajectory['POS_X'].values, dtype=np.float32), (-1, 1))
         self.y = np.reshape(np.array(self.trajectory['POS_Y'].values, dtype=np.float32), (-1, 1))
         self.max_x = np.max(self.x)
@@ -92,7 +99,7 @@ class AirSimCarEnv(AirSimEnv):
         # print(self.car.simGetVehiclePose())
         # print(len(self.trajectory))
 
-        self.rand = np.random.randint(0, len(self.trajectory))
+        self.rand = np.random.randint(0, len(self.trajectory) - 200)
         randrow = self.trajectory.iloc[self.rand]
         # print(randrow['POS_X'])
         self.car.simSetVehiclePose(airsim.Pose(airsim.Vector3r(randrow['POS_X'],
@@ -127,7 +134,10 @@ class AirSimCarEnv(AirSimEnv):
 
         self.state['pose'] = airsim.to_eularian_angles(self.car_state.kinematics_estimated.orientation)
 
-        self.state['speed'] = self.car_state.speed
+        self.state['linear_velocity'] = self.car_state.kinematics_estimated.linear_velocity.to_numpy_array()
+        self.state['angular_velocity'] = self.car_state.kinematics_estimated.angular_velocity.to_numpy_array()
+        # print(self.state['linear_velocity'])
+        # print(self.state['angular_velocity'])
 
         self.state['collision'] = self.car.simGetCollisionInfo().has_collided
 
@@ -135,7 +145,11 @@ class AirSimCarEnv(AirSimEnv):
         for v in self.state['position'][:2]:
             temp.append(v)
         temp.append(self.state['pose'][2])
-        temp.append(self.state['speed'])
+        for v in self.state['linear_velocity'][:2]:
+            temp.append(v)
+        for v in self.state['angular_velocity'][:2]:
+            temp.append(v)
+        # print(np.array(temp))
 
         return np.array(temp)
 
@@ -147,25 +161,67 @@ class AirSimCarEnv(AirSimEnv):
         pts = [np.array([self.x[i], self.y[i]]) for i in range(len(self.x))]
         car_pre_pt = self.state['preposition'][:2]
         car_pt = self.state['position'][:2]
+
+        ###########################################################################################################
         # print(car_pt)
-        dist = 10000000
+        # dist = 10000000
         # print(len(pts))
-        for i in range(len(pts) - 1):
-            dist = min(dist,
-                       np.linalg.norm(np.cross((car_pt - pts[i]), (car_pt - pts[i + 1]))
-                                      ) / np.linalg.norm(pts[i] - pts[i + 1]), )
-            # print(min(np.linalg.norm(np.cross((car_pt - pts[i]), (car_pt - pts[i + 1]))) / np.linalg.norm(pts[i] - pts[i + 1])))
+        # for i in range(len(pts) - 1):
+        #     dist = min(dist,
+        #                np.linalg.norm(np.cross((car_pt - pts[i]), (car_pt - pts[i + 1]))
+        #                               ) / np.linalg.norm(pts[i] - pts[i + 1]), )
+        # print(np.argmin(np.linalg.norm(np.cross((car_pt - pts[i]), (car_pt - pts[i + 1]))
+        #                                ) / np.linalg.norm(pts[i] - pts[i + 1])))
+        # print(min(np.linalg.norm(np.cross((car_pt - pts[i]), (car_pt - pts[i + 1]))) / np.linalg.norm(pts[i] - pts[i + 1])))
         # print(dist)
 
-        if dist > thresh_dist:
-            reward = -3
-        else:
-            reward_dist = math.exp(-beta * dist)  # - 0.5
-            reward_speed = ((self.car_state.speed - min_speed) / (max_speed - min_speed))  # - 0.5
-            reward = reward_dist + reward_speed
-        print(reward)
+        # if dist > thresh_dist:
+        #     reward = -3
+        # else:
+        #     reward_dist = math.exp(-beta * dist)  # - 0.5
+        #     reward_speed = ((self.car_state.speed - min_speed) / (max_speed - min_speed))  # - 0.5
+        #     reward = reward_dist + reward_speed
+        # print(reward)
+
+        #############################################################################################################
+
+        temp = np.array(
+            [math.sqrt(((car_pt[0] - pts[i][0]) ** 2) + ((car_pt[1] - pts[i][1]) ** 2)) for i in range(len(pts))])
+        min_dist = np.nanmin(temp)
+        index = np.argmin(temp)
+
+        temp_x = pts[index + 10][0][0] - pts[index][0][0]
+        temp_y = pts[index + 10][1][0] - pts[index][1][0]
+        v1 = np.array([temp_x, temp_y])
+
+        temp_x = car_pt[0] - car_pre_pt[0]
+        temp_y = car_pt[1] - car_pre_pt[1]
+        v2 = np.array([temp_x, temp_y])
+
+        dist1 = np.linalg.norm(v1)
+        dist2 = np.linalg.norm(v2)
+
+        ip = v1[0] * v2[0] + v1[1] * v2[1]
+
+        ip2 = dist1 * dist2
+
+        cost = ip / ip2
+        theta = math.acos(cost)
+        reward = 0
+
+        angular_reward = 0.1 - theta / np.pi
+        reward += angular_reward
+        print(f'angular reward: {angular_reward}')
+        dist_reward = 0.001 - min_dist
+        reward += dist_reward
+        print(f'distance reward: {dist_reward}')
+        # reward_speed = (self.car_state.speed - min_speed) / (max_speed - min_speed)
+        # reward += reward_speed
+        # print(f'speed reward: {reward_speed}')
+
         done = 0
         if self.state['collision']:
+            reward -= 3
             done = 1
         return reward, done
 
