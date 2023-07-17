@@ -55,7 +55,6 @@ class AirSimCarEnv(AirSimEnv):
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
              np.finfo(np.float32).min],
             dtype=np.float32)
 
@@ -65,11 +64,10 @@ class AirSimCarEnv(AirSimEnv):
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
              np.finfo(np.float32).max],
             dtype=np.float32)
 
-        self.observation_space = spaces.Box(low, high, shape=(7,), dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(6,), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
         self.car_controls = airsim.CarControls()
@@ -152,9 +150,8 @@ class AirSimCarEnv(AirSimEnv):
         temp.append(self.state['pose'][2])
         for v in self.state['linear_velocity'][:2]:
             temp.append(v)
-        for v in self.state['angular_velocity'][:2]:
-            temp.append(v)
-        # print(np.array(temp))
+        temp.append(self.state['angular_velocity'][2])
+        print(np.array(temp))
 
         return np.array(temp)
 
@@ -214,17 +211,17 @@ class AirSimCarEnv(AirSimEnv):
         theta = math.acos(cost)
         reward = 0
 
-        angular_reward = (0.3 - theta / np.pi) / 10
+        angular_reward = (0.35 - theta / np.pi) / 10
         reward += angular_reward
-        print(f'angular reward: {angular_reward}')
-        dist_reward = (0.001 - min_dist) * 100
+        # print(f'angular reward: {angular_reward}')
+        dist_reward = (0.003 - min_dist) * 100
         if reward > 0:
             if dist_reward > 0:
                 reward *= dist_reward
         if reward < 0:
             if dist_reward < 0:
                 reward *= -dist_reward
-        print(f'distance reward: {dist_reward}')
+        # print(f'distance reward: {dist_reward}')
         # reward_speed = (self.car_state.speed - min_speed) / (max_speed - min_speed)
         # reward += reward_speed
         # print(f'speed reward: {reward_speed}')
