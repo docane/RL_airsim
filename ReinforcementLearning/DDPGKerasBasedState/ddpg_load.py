@@ -1,5 +1,5 @@
 import gym
-from state_ddpg_10 import DDPGagent
+from ddpg_learn import DDPGagent
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
 import pickle

@@ -1,5 +1,5 @@
 import gym
-from state_ddpg_10 import DDPGagent
+from ddpg_learn import DDPGagent
 
 gym.envs.register(id='car_env-v0', entry_point='car_env_state_16_17:AirSimCarEnv')
 
