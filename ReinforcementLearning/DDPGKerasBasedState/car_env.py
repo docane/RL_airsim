@@ -98,17 +98,17 @@ class AirSimCarEnv(AirSimEnv):
         self.pts_0 = np.concatenate((self.pts[-135:], self.pts[:1000]))
         self.pts_1 = np.concatenate((self.pts[-1000:], self.pts[:130]))
 
-        self.temp_0 = [-135]
+        self.temp_0 = [0]
         for i in range(500):
-            for j in range(self.temp_0[-1], 1000):
+            for j in range(self.temp_0[-1], len(self.pts_0)):
                 if math.sqrt((self.pts_0[j][0] - self.pts_0[self.temp_0[-1]][0]) ** 2 + (
                         self.pts_0[j][1] - self.pts_0[self.temp_0[-1]][1]) ** 2) > 5 / 2000:
                     self.temp_0.append(j)
                     break
 
-        self.temp_1 = [-1000]
+        self.temp_1 = [0]
         for i in range(500):
-            for j in range(self.temp_1[-1], 130):
+            for j in range(self.temp_1[-1], len(self.pts_1)):
                 if math.sqrt((self.pts_1[j][0] - self.pts_1[self.temp_1[-1]][0]) ** 2 + (
                         self.pts_1[j][1] - self.pts_1[self.temp_1[-1]][1]) ** 2) > 5 / 2000:
                     self.temp_1.append(j)
@@ -124,8 +124,8 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = 0
         self.car.setCarControls(self.car_controls)
 
-        # randint = np.random.randint(0, len(self.trajectory))
-        randint = 1010
+        randint = np.random.randint(0, len(self.trajectory))
+        # randint = 1010
         if randint < 946:
             self.direction = 0
             start_index = randint
@@ -176,7 +176,7 @@ class AirSimCarEnv(AirSimEnv):
                 [math.sqrt(((car_pt[0] - self.pts_0[i][0]) ** 2) + ((car_pt[1] - self.pts_0[i][1]) ** 2)) for i in
                  range(len(self.pts_0))])
             min_dist_index = np.argmin(dist)
-            if min_dist_index > 945:
+            if min_dist_index > (len(self.pts_0) - 30):
                 self.direction = 1
 
         elif self.direction == 1:
@@ -184,11 +184,8 @@ class AirSimCarEnv(AirSimEnv):
                 [math.sqrt(((car_pt[0] - self.pts_1[i][0]) ** 2) + ((car_pt[1] - self.pts_1[i][1]) ** 2)) for i in
                  range(len(self.pts_1))])
             min_dist_index = np.argmin(dist)
-            if min_dist_index > 1800:
+            if min_dist_index > (len(self.pts_1) - 30):
                 self.direction = 0
-
-        print(self.direction)
-        print(min_dist_index)
 
         if self.direction == 0:
             pts = self.pts_0
@@ -210,8 +207,8 @@ class AirSimCarEnv(AirSimEnv):
         route_point = [index for index in range(min_dist_temp_index, min_dist_temp_index + 3)]
 
         self.target_point = np.array(
-            [(self.x[temp[route_point[2]]][0] + car_pt[0]) / 2,
-             (self.y[temp[route_point[2]]][0] + car_pt[1]) / 2])
+            [(pts[temp[route_point[2]]][0] + car_pt[0]) / 2,
+             (pts[temp[route_point[2]]][1] + car_pt[1]) / 2])
         v1 = self.target_point - car_pt[:2]
         v1_norm = np.linalg.norm(v1)
         v2 = v1 / v1_norm * 5
@@ -272,8 +269,8 @@ class AirSimCarEnv(AirSimEnv):
         target_dir_vec = v1 / (v1_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
         theta = math.acos(ip)
-        if self.direction == 1:
-            theta = np.pi - theta
+        # if self.direction == 1:
+        #     theta = np.pi - theta
         angular_reward = (1 / (theta / np.pi) / 10)
         print('Angular Reward:', angular_reward)
 
@@ -288,7 +285,7 @@ class AirSimCarEnv(AirSimEnv):
 
     def step(self, action):
         self._do_action(action)
-        time.sleep(0.5)
+        # time.sleep(0.5)
         obs = self._get_obs()
         reward, done = self._compute_reward()
         return obs, reward, done, {}
