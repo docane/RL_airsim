@@ -74,7 +74,14 @@ class AirSimCarEnv(AirSimEnv):
             dtype=np.float32)
 
         self.observation_space = spaces.Box(low, high, shape=(8,), dtype=np.float32)
-        self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+
+        action_space_low = np.array(
+            [-1, 0], dtype=np.float32)
+
+        action_space_high = np.array(
+            [1, 1], dtype=np.float32)
+
+        self.action_space = spaces.Box(low=action_space_low, high=action_space_high, shape=(2,), dtype=np.float32)
 
         self.car_controls = airsim.CarControls()
         self.car_state = None
@@ -115,17 +122,16 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = 0
         self.car.setCarControls(self.car_controls)
 
-        # self.rand = np.random.randint(0, len(self.trajectory) - 200)
-        self.rand = 0
+        self.rand = np.random.randint(0, len(self.trajectory) - 200)
+        # self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
-        self.car.simSetVehiclePose(
-            airsim.Pose(airsim.Vector3r(randrow['POS_X'],
-                                        randrow['POS_Y'],
-                                        randrow['POS_Z']),
-                        airsim.Quaternionr(randrow['Q_X'],
-                                           randrow['Q_Y'],
-                                           randrow['Q_Z'],
-                                           randrow['Q_W'])), True)
+        self.car.simSetVehiclePose(airsim.Pose(airsim.Vector3r(randrow['POS_X'],
+                                                               randrow['POS_Y'],
+                                                               randrow['POS_Z']),
+                                               airsim.Quaternionr(randrow['Q_X'],
+                                                                  randrow['Q_Y'],
+                                                                  randrow['Q_Z'],
+                                                                  randrow['Q_W'])), True)
 
         self.state['target_point'][0] = self.x[5] / np.linalg.norm(self.pts[5]) * 5
         self.state['target_point'][1] = self.y[5] / np.linalg.norm(self.pts[5]) * 5
@@ -138,8 +144,8 @@ class AirSimCarEnv(AirSimEnv):
 
     def _do_action(self, action):
         self.car_controls.brake = 0
-        self.car_controls.throttle = 0.5
-        self.car_controls.steering = float(action)
+        self.car_controls.throttle = float(action[1])
+        self.car_controls.steering = float(action[0])
 
         self.car.setCarControls(self.car_controls)
         # self.car.simContinueForTime(0.5)
@@ -166,7 +172,6 @@ class AirSimCarEnv(AirSimEnv):
         dist = np.array([math.sqrt(((car_pt[0] - self.pts[i][0]) ** 2) + ((car_pt[1] - self.pts[i][1]) ** 2)) for i in
                          range(len(self.pts))])
         min_dist_index = np.argmin(dist)
-        print(min_dist_index)
         min_dist_temp_index = 0
         for i in range(len(self.temp)):
             if min_dist_index < self.temp[i]:
@@ -200,8 +205,8 @@ class AirSimCarEnv(AirSimEnv):
     def _compute_reward(self):
         car_pt = self.state['position'][:2]
 
-        v1 = self.target_point - car_pt[:2]
-        # v1 = self.state['next_target_point'] - car_pt[:2]
+        # v1 = self.target_point - car_pt[:2]
+        v1 = self.state['next_target_point'] - car_pt[:2]
         v1_norm = np.linalg.norm(v1)
         v2 = self.state['next_target_point']
         dist_reward = 1 / (5 - np.linalg.norm(v2 - (self.state['linear_velocity'][:2]))) / 10000
@@ -212,7 +217,9 @@ class AirSimCarEnv(AirSimEnv):
         target_dir_vec = v1 / (v1_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
         theta = math.acos(ip)
-        angular_reward = (1 / (theta / np.pi) / 10)
+        angular_reward = 1 / (theta / np.pi) / 10 * np.linalg.norm(self.state['linear_velocity'][:2]) * 2000
+        if angular_reward < 0.001:
+            angular_reward = -0.1
         print('Angular Reward:', angular_reward)
 
         # reward = dist_reward
