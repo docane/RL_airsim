@@ -118,13 +118,14 @@ class AirSimCarEnv(AirSimEnv):
         # self.rand = np.random.randint(0, len(self.trajectory) - 200)
         self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
-        self.car.simSetVehiclePose(airsim.Pose(airsim.Vector3r(randrow['POS_X'],
-                                                               randrow['POS_Y'],
-                                                               randrow['POS_Z']),
-                                               airsim.Quaternionr(randrow['Q_X'],
-                                                                  randrow['Q_Y'],
-                                                                  randrow['Q_Z'],
-                                                                  randrow['Q_W'])), True)
+        self.car.simSetVehiclePose(
+            airsim.Pose(airsim.Vector3r(randrow['POS_X'],
+                                        randrow['POS_Y'],
+                                        randrow['POS_Z']),
+                        airsim.Quaternionr(randrow['Q_X'],
+                                           randrow['Q_Y'],
+                                           randrow['Q_Z'],
+                                           randrow['Q_W'])), True)
 
         self.state['target_point'][0] = self.x[5] / np.linalg.norm(self.pts[5]) * 5
         self.state['target_point'][1] = self.y[5] / np.linalg.norm(self.pts[5]) * 5
@@ -165,6 +166,7 @@ class AirSimCarEnv(AirSimEnv):
         dist = np.array([math.sqrt(((car_pt[0] - self.pts[i][0]) ** 2) + ((car_pt[1] - self.pts[i][1]) ** 2)) for i in
                          range(len(self.pts))])
         min_dist_index = np.argmin(dist)
+        print(min_dist_index)
         min_dist_temp_index = 0
         for i in range(len(self.temp)):
             if min_dist_index < self.temp[i]:
@@ -199,20 +201,22 @@ class AirSimCarEnv(AirSimEnv):
         car_pt = self.state['position'][:2]
 
         v1 = self.target_point - car_pt[:2]
+        # v1 = self.state['next_target_point'] - car_pt[:2]
         v1_norm = np.linalg.norm(v1)
-        v2 = self.state['target_point']
-        dist_reward = (3 - np.linalg.norm(v2 - (self.state['linear_velocity'][:2] * 2000))) * 0.1
-        print('Distance Reward:', dist_reward)
+        v2 = self.state['next_target_point']
+        dist_reward = 1 / (5 - np.linalg.norm(v2 - (self.state['linear_velocity'][:2]))) / 10000
+        # print('Distance Reward:', dist_reward)
+
         car_dir_vec = self.state['linear_velocity'][:2] / (np.linalg.norm(self.state['linear_velocity'][:2]) + 0.00001)
         # print(car_dir_vec)
         target_dir_vec = v1 / (v1_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
         theta = math.acos(ip)
-        angular_reward = 0.2 - abs(theta / np.pi)
+        angular_reward = (1 / (theta / np.pi) / 10)
         print('Angular Reward:', angular_reward)
 
-        reward = dist_reward
-        reward += angular_reward
+        # reward = dist_reward
+        reward = angular_reward
 
         done = 0
         if self.state['collision']:

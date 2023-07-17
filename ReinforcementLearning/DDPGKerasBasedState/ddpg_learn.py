@@ -10,7 +10,7 @@ from replaybuffer import ReplayBuffer
 import os
 import gym
 
-gym.envs.register(id='car_env-v0', entry_point='car_env_state_15:AirSimCarEnv')
+gym.envs.register(id='car_env-v0', entry_point='car_env_state_16:AirSimCarEnv')
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 gpus = tf.config.experimental.list_physical_devices('GPU')
