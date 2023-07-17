@@ -1,4 +1,3 @@
-import math
 import numpy as np
 import gym
 from gym import spaces
@@ -46,15 +45,13 @@ class AirSimCarEnv(AirSimEnv):
             'angular_velocity': np.zeros(3),
             'target_point': np.zeros(2),
             'next_target_point': np.zeros(2),
-            'angle': np.zeros(1),
-            'track_distance': np.zeros(1)
+            'angle': np.zeros(1)
         }
 
         self.car = airsim.CarClient(ip=ip_address)
 
         low = np.array(
             [np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
@@ -74,11 +71,11 @@ class AirSimCarEnv(AirSimEnv):
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
              np.finfo(np.float32).max],
             dtype=np.float32)
 
-        self.observation_space = spaces.Box(low, high, shape=(10,), dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(9,), dtype=np.float32)
+
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
         self.car_controls = airsim.CarControls()
@@ -90,14 +87,14 @@ class AirSimCarEnv(AirSimEnv):
         pos_y = self.trajectory['POS_Y'].values.astype(np.float32)
         self.max_pos = 1000.0
         self.min_pos = -1000.0
-        self.x = (pos_x - self.min_pos) / (self.max_pos - self.min_pos)
-        self.y = (pos_y - self.min_pos) / (self.max_pos - self.min_pos)
-        self.x = self.x.reshape((-1, 1))
-        self.y = self.y.reshape((-1, 1))
+        x = (pos_x - self.min_pos) / (self.max_pos - self.min_pos)
+        y = (pos_y - self.min_pos) / (self.max_pos - self.min_pos)
+        x = x.reshape((-1, 1))
+        y = y.reshape((-1, 1))
 
         self.velocity_divide = 2000
 
-        self.pts = np.column_stack((self.x, self.y))
+        self.pts = np.column_stack((x, y))
         self.temp = [0]
 
         # 5m 단위로 경로 포인트 잡기
@@ -163,8 +160,6 @@ class AirSimCarEnv(AirSimEnv):
 
         min_dist_index = dist.argmin()
 
-        print(min_dist_index)
-
         if min_dist_index > 770:
             if self.count == 1:
                 sys.exit()
@@ -179,9 +174,8 @@ class AirSimCarEnv(AirSimEnv):
                                                randrow['Q_W'])), True)
             self.count = 1
             self.target_point = np.array(
-                [(self.x[self.temp[1]][0] + car_pt[0]) / 2,
-
-                 (self.y[self.temp[1]][0] + car_pt[1]) / 2])
+                [(self.pts[self.temp[1]][0] + car_pt[0]) / 2,
+                 (self.pts[self.temp[1]][0] + car_pt[1]) / 2])
             v1 = self.target_point - car_pt[:2]
             v1_norm = np.linalg.norm(v1)
             v2 = v1 / v1_norm * 5
@@ -197,8 +191,8 @@ class AirSimCarEnv(AirSimEnv):
         route_point = [index for index in range(min_dist_temp_index, min_dist_temp_index + 3)]
 
         self.target_point = np.array(
-            [(self.x[self.temp[route_point[2]]][0] + car_pt[0]) / 2,
-             (self.y[self.temp[route_point[2]]][0] + car_pt[1]) / 2])
+            [(self.pts[self.temp[route_point[2]]][0] + car_pt[0]) / 2,
+             (self.pts[self.temp[route_point[2]]][1] + car_pt[1]) / 2])
         v1 = self.target_point - car_pt[:2]
         v1_norm = np.linalg.norm(v1)
         v2 = v1 / v1_norm * 5
@@ -210,31 +204,23 @@ class AirSimCarEnv(AirSimEnv):
 
         # 바로 뒤에 있는 타겟 포인트
         first_target_point = np.array(
-            [self.x[self.temp[route_point[0]]][0],
-             self.y[self.temp[route_point[0]]][0]])
+            [self.pts[self.temp[route_point[0]]][0],
+             self.pts[self.temp[route_point[0]]][1]])
 
         # 바로 앞에 있는 타겟 포인트
         second_target_point = np.array(
-            [self.x[self.temp[route_point[1]]][0],
-             self.y[self.temp[route_point[1]]][0]])
+            [self.pts[self.temp[route_point[1]]][0],
+             self.pts[self.temp[route_point[1]]][1]])
+
+        car_vel = self.state['linear_velocity'][:2]
+        car_vel_norm = np.linalg.norm(car_vel)
 
         target_dir_vec = (second_target_point - first_target_point) / np.linalg.norm(
             first_target_point - second_target_point)
-        car_dir_vec = self.state['linear_velocity'][:2] / (
-                np.linalg.norm(self.state['linear_velocity'][:2]) + 0.0000001)
+        car_dir_vec = car_vel / (car_vel_norm + 0.00001)
         ip = car_dir_vec[0] * target_dir_vec[1] - car_dir_vec[1] * target_dir_vec[0]
-        theta = math.asin(ip)
+        theta = np.arcsin(ip)
         self.state['angle'][0] = theta
-
-        min_dist = np.min(dist)
-        if self.pts[min_dist_index][1] < car_pt[1]:
-            pass
-        else:
-            if self.pts[min_dist_index][0] < car_pt[0]:
-                pass
-            else:
-                min_dist = -min_dist
-        self.state['track_distance'][0] = min_dist
 
         temp = []
         for v in self.state['position'][:2]:
@@ -246,19 +232,20 @@ class AirSimCarEnv(AirSimEnv):
         for v in self.state['next_target_point'][:2]:
             temp.append(v)
         temp.append(self.state['angle'][0] / np.pi)
-        temp.append(self.state['track_distance'][0])
 
         return np.array(temp)
 
     def _compute_reward(self):
         car_pt = self.state['position'][:2]
+        car_vel = self.state['linear_velocity'][:2]
 
         v1 = self.target_point - car_pt[:2]
         v1_norm = np.linalg.norm(v1)
-        car_dir_vec = self.state['linear_velocity'][:2] / (np.linalg.norm(self.state['linear_velocity'][:2]) + 0.00001)
+        car_vel_norm = np.linalg.norm(car_vel)
+        car_dir_vec = car_vel / (car_vel_norm + 0.00001)
         target_dir_vec = v1 / (v1_norm + 0.00001)
-        ip = car_dir_vec[0] * target_dir_vec[0] + car_dir_vec[1] * target_dir_vec[1]
-        theta = math.acos(ip)
+        ip = np.dot(car_dir_vec, target_dir_vec)
+        theta = np.arccos(ip)
         angular_reward = (1 / (theta / np.pi) / 10)
         print('Angular Reward:', angular_reward)
 
@@ -283,3 +270,7 @@ class AirSimCarEnv(AirSimEnv):
         self._setup_car()
         time.sleep(2)
         return self._get_obs()
+
+
+def gaussian(x, mean=0.0, sigma=1.0):
+    return (1 / np.sqrt(2 * np.pi * sigma ** 2)) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))
