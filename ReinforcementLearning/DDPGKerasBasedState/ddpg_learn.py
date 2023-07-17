@@ -1,11 +1,16 @@
+import time
 import datetime as dt
 import numpy as np
 from keras.models import Model
 from keras.layers import Input, Dense, concatenate
 from keras.optimizers import Adam
+from keras.initializers.initializers_v1 import RandomUniform
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
 import os
+import gym
+
+gym.envs.register(id='car_env-v0', entry_point='car_env_state_15:AirSimCarEnv')
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -18,21 +23,22 @@ if gpus:
 
 
 class Actor(Model):
-    def __init__(self, action_dim):
+    def __init__(self):
         super(Actor, self).__init__()
-
-        self.action_size = action_dim
 
         self.dense1 = Dense(120, activation='relu')
         self.dense2 = Dense(240, activation='relu')
-        self.action = Dense(self.action_size, activation='tanh')
+        self.steering = Dense(1, activation='tanh', kernel_initializer=RandomUniform(-1e-3, 1e-3))
+        self.throttle = Dense(1, activation='sigmoid', kernel_initializer=RandomUniform(-1e-3, 1e-3))
 
     def call(self, x):
         x = self.dense1(x)
         x = self.dense2(x)
-        action = self.action(x)
+        steering = self.steering(x)
+        throttle = self.throttle(x)
+        h = concatenate([steering, throttle], axis=-1)
 
-        return action
+        return h
 
 
 class Critic(Model):
@@ -61,7 +67,7 @@ class DDPGagent(object):
     def __init__(self, env):
         self.gamma = 0.99
         self.batch_size = 64
-        self.buffer_size = 1000
+        self.buffer_size = 10000
         self.actor_learning_rate = 0.0001
         self.critic_learning_rate = 0.001
         self.tau = 0.001
@@ -72,8 +78,8 @@ class DDPGagent(object):
         self.action_bound_high = env.action_space.high
         self.action_bound_low = env.action_space.low
 
-        self.actor = Actor(self.action_dim)
-        self.target_actor = Actor(self.action_dim)
+        self.actor = Actor()
+        self.target_actor = Actor()
 
         self.actor.build(input_shape=(None, self.state_dim))
         self.target_actor.build(input_shape=(None, self.state_dim))
@@ -153,21 +159,31 @@ class DDPGagent(object):
             step, episode_reward, done = 0, 0, False
             state = self.env.reset()
             actor_loss, critic_loss = 0, 0
+            time.sleep(2)
+            # time.sleep(0.2)
             while not done:
                 action = self.get_action(state)
+                # print('State:', state)
+                # print('Action:', action)
                 noise = self.ou_noise(pre_noise, dim=self.action_dim)
                 action = np.clip(action + noise, self.action_bound_low, self.action_bound_high)
                 next_state, reward, done, _ = self.env.step(action)
+                # print(reward)
                 self.buffer.add_buffer(state, action, reward, next_state, done)
 
-                if self.buffer.buffer_count() > 500:
+                if self.buffer.buffer_count() > 5000:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
                     target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
                                                     self.target_actor(
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
                     y_i = self.td_target(rewards, target_qs.numpy(), dones)
 
-                    # 액터 신경망 업데이트
+                    with tf.GradientTape() as tape_c:
+                        q = self.critic([states, actions], training=True)
+                        critic_loss = tf.reduce_mean(tf.square(q - y_i))
+                    critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
+                    self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
+
                     with tf.GradientTape() as tape_a:
                         actions = self.actor(states, training=True)
                         critic_q = self.critic([states, actions])
@@ -175,14 +191,8 @@ class DDPGagent(object):
                     actor_grads = tape_a.gradient(actor_loss, self.actor.trainable_variables)
                     self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
 
-                    # 크리틱 신경망 업데이트
-                    with tf.GradientTape() as tape_c:
-                        q = self.critic([states, actions], training=True)
-                        critic_loss = tf.reduce_mean(tf.square(q - y_i))
-                    critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
-                    self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
-
                     self.update_target_network(self.tau)
+                    # print(f'Actor Loss: {actor_loss}', f'Critic Loss: {critic_loss}')
 
                 pre_noise = noise
                 state = next_state
@@ -197,8 +207,8 @@ class DDPGagent(object):
             log += f' Critic Loss: {critic_loss}'
             print(log)
             self.save_episode_reward.append(episode_reward)
-            self.draw_tensorboard(episode_reward, ep)
-            self.save_weights(self.save_model_dir)
+            # self.draw_tensorboard(episode_reward, ep)
+            # self.save_weights(self.save_model_dir)
 
             # if ep % 100 == 99:
             #     del self.env
