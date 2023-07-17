@@ -39,9 +39,8 @@ class AirSimCarEnv(AirSimEnv):
         self.start_ts = 0
 
         self.state = {
-            'position': np.zeros(3),
-            'pose': np.zeros(4),
-            'collision': False
+            'position': np.zeros(2),
+            'pose': np.zeros(3)
         }
 
         self.car = airsim.CarClient(ip=ip_address)
@@ -51,10 +50,7 @@ class AirSimCarEnv(AirSimEnv):
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             0],
+             np.finfo(np.float32).min],
             dtype=np.float32)
 
         high = np.array(
@@ -62,26 +58,23 @@ class AirSimCarEnv(AirSimEnv):
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             1],
+             np.finfo(np.float32).max],
             dtype=np.float32)
 
-        self.observation_space = spaces.Box(low, high, shape=(8,), dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(5,), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
         self.car_controls = airsim.CarControls()
         self.car_state = None
 
-        self.max_x = 895.674
-        self.min_x = -18.1231
-        self.max_y = 0.290451
-        self.min_y = -408.805
-
         self.trajectory = pd.read_csv('data/airsim_rec.txt', sep='\t')
         self.x = np.reshape(np.array(self.trajectory['POS_X'].values, dtype=np.float32), (-1, 1))
         self.y = np.reshape(np.array(self.trajectory['POS_Y'].values, dtype=np.float32), (-1, 1))
+        self.max_x = np.max(self.x)
+        self.min_x = np.min(self.x)
+        self.max_y = np.max(self.y)
+        self.min_y = np.min(self.y)
+
         self.x = (self.x - self.min_x) / (self.max_x - self.min_x)
         self.y = (self.y - self.min_y) / (self.max_y - self.min_y)
 
@@ -116,7 +109,7 @@ class AirSimCarEnv(AirSimEnv):
 
     def _do_action(self, action):
         self.car_controls.brake = 0
-        self.car_controls.throttle = 0.4
+        self.car_controls.throttle = 0.5
         self.car_controls.steering = float(action)
 
         self.car.setCarControls(self.car_controls)
@@ -129,15 +122,13 @@ class AirSimCarEnv(AirSimEnv):
         self.state['position'][1] = (self.state['position'][1] - self.min_y) / (self.max_y - self.min_y)
         self.state['pose'] = self.car_state.kinematics_estimated.orientation.to_numpy_array()
         self.state['collision'] = self.car.simGetCollisionInfo().has_collided
+        # print(self.car_state.kinematics_estimated.orientation)
         temp = []
-        for v in self.state['position']:
+        for v in self.state['position'][:2]:
             temp.append(v)
-        for v in self.state['pose']:
+        for v in self.state['pose'][1:]:
             temp.append(v)
-        if not self.state['collision']:
-            temp.append(0)
-        else:
-            temp.append(1)
+
         return np.array(temp)
 
     def _compute_reward(self):
@@ -154,7 +145,7 @@ class AirSimCarEnv(AirSimEnv):
             reward = -0.1
         else:
             reward = 0.5
-        print(reward)
+        # print(reward)
         done = 0
         if self.state['collision']:
             reward += -5
