@@ -4,9 +4,8 @@ from keras.models import Model
 from keras.layers import Input, Dense, concatenate
 from keras.optimizers import Adam
 import tensorflow as tf
-from ReinforcementLearning.DDPGKerasBasedState.replaybuffer import ReplayBuffer
+from replaybuffer import ReplayBuffer
 import os
-import pickle
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -65,7 +64,7 @@ class DDPGagent(object):
         self.buffer_size = 1000
         self.actor_learning_rate = 0.0001
         self.critic_learning_rate = 0.001
-        self.tau = 0.001
+        self.tau = 0.0001
 
         self.env = env
         self.state_dim = env.observation_space.shape[0]
@@ -94,8 +93,6 @@ class DDPGagent(object):
         self.critic.summary()
 
         self.buffer = ReplayBuffer(self.buffer_size)
-        with open('data/buffer.pkl', 'rb') as f:
-            self.buffer = pickle.load(f)
 
         self.writer = tf.summary.create_file_writer(
             f'summary/airsim_ddpg_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}')
@@ -149,6 +146,7 @@ class DDPGagent(object):
     def train(self, max_episode_max):
         self.update_target_network(1.0)
         total_time = 0
+        step_avg = 0
         for ep in range(int(max_episode_max)):
             pre_noise = np.zeros(self.action_dim)
             step, episode_reward, done = 0, 0, False
@@ -194,14 +192,20 @@ class DDPGagent(object):
                 step += 1
 
             total_time += step
+            step_avg = 0.9 * step_avg + 0.1 * step if step_avg != 0 else step
             log = f'Episode: {ep + 1}'
+            log += f' Step: {step}'
             log += f' Total Time: {total_time}'
+            log += f' Avg Step: {step_avg}'
             log += f' Reward: {round(episode_reward, 2)}'
             log += f' Actor Loss: {actor_loss}'
             log += f' Critic Loss: {critic_loss}'
             print(log)
             self.draw_tensorboard(episode_reward, ep)
             self.save_weights(self.save_model_dir)
+
+            if step_avg > 1000:
+                break
 
             # if ep % 100 == 99:
             #     del self.env
