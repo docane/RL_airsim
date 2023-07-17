@@ -94,7 +94,7 @@ class AirSimCarEnv(AirSimEnv):
         x = x.reshape((-1, 1))
         y = y.reshape((-1, 1))
 
-        self.velocity_divide = 2000
+        self.velocity_divide = 2000.0
 
         self.pts = np.column_stack((x, y))
         self.pts_1 = np.column_stack((pos_x.astype(float), pos_y.astype(float), pos_z.astype(float)))
@@ -106,7 +106,7 @@ class AirSimCarEnv(AirSimEnv):
             if distance > (5 / 2000):
                 self.temp.append(i)
 
-        self.car.simPlotLineStrip(points=[Vector3r(x, y, z+0.5) for x, y, z in self.pts_1], is_persistent=True)
+        self.car.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.pts_1], is_persistent=True)
         self._success = False
 
     def _setup_car(self):
@@ -228,9 +228,10 @@ class AirSimCarEnv(AirSimEnv):
         reward += distance_reward
 
         done = self._check_done()
+        # if done:
+        #     reward += 100
         if self.state['collision']:
-            # reward -= 0.1
-            self.count = 0
+            # reward -= 1
             done = 1
 
         return reward, done
@@ -246,6 +247,10 @@ class AirSimCarEnv(AirSimEnv):
         self._setup_car()
         time.sleep(2)
         return self._get_obs()
+
+    def close(self):
+        self.car.reset()
+        self.car.enableApiControl(True)
 
     def _car_position_init(self, index):
         while True:
