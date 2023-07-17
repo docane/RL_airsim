@@ -3,10 +3,14 @@ import datetime as dt
 import numpy as np
 from keras.models import Model
 from keras.layers import Input, Dense, concatenate
+from keras.activations import leaky_relu
 from keras.optimizers import Adam
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
 import os
+import gym
+
+gym.envs.register(id='car_env-v0', entry_point='car_env_state_14:AirSimCarEnv')
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -24,8 +28,8 @@ class Actor(Model):
 
         self.action_size = action_dim
 
-        self.dense1 = Dense(120, activation='relu', kernel_initializer='random_uniform')
-        self.dense2 = Dense(240, activation='relu', kernel_initializer='random_uniform')
+        self.dense1 = Dense(120, activation=leaky_relu, kernel_initializer='random_uniform')
+        self.dense2 = Dense(240, activation=leaky_relu, kernel_initializer='random_uniform')
         self.action = Dense(self.action_size, activation='tanh', kernel_initializer='random_uniform')
 
     def call(self, x):
@@ -39,10 +43,10 @@ class Actor(Model):
 class Critic(Model):
     def __init__(self):
         super(Critic, self).__init__()
-        self.x1 = Dense(120, activation='relu', kernel_initializer='random_uniform')
-        self.x2 = Dense(240, activation='relu', kernel_initializer='random_uniform')
-        self.a1 = Dense(240, activation='relu', kernel_initializer='random_uniform')
-        self.h1 = Dense(240, activation='relu', kernel_initializer='random_uniform')
+        self.x1 = Dense(120, activation=leaky_relu, kernel_initializer='random_uniform')
+        self.x2 = Dense(240, activation=leaky_relu, kernel_initializer='random_uniform')
+        self.a1 = Dense(240, activation=leaky_relu, kernel_initializer='random_uniform')
+        self.h1 = Dense(240, activation=leaky_relu, kernel_initializer='random_uniform')
         self.q = Dense(1, activation='linear', kernel_initializer='random_uniform')
 
     def call(self, state_action):
@@ -60,7 +64,7 @@ class Critic(Model):
 
 class DDPGagent(object):
     def __init__(self, env):
-        self.gamma = 0.99
+        self.gamma = 0.95
         self.batch_size = 128
         self.buffer_size = 20000
         self.actor_learning_rate = 0.0001
@@ -111,25 +115,6 @@ class DDPGagent(object):
         for i in range(len(phi)):
             target_phi[i] = tau * phi[i] + (1 - tau) * target_phi[i]
         self.target_critic.set_weights(target_phi)
-
-    def critic_learn(self, states, actions, td_targets):
-        with tf.GradientTape() as tape:
-            q = self.critic([states, actions], training=True)
-            loss = tf.reduce_mean(tf.square(q - td_targets))
-
-        grads = tape.gradient(loss, self.critic.trainable_variables)
-        self.critic_opt.apply_gradients(zip(grads, self.critic.trainable_variables))
-        return loss
-
-    def actor_learn(self, states):
-        with tf.GradientTape() as tape:
-            actions = self.actor(states, training=True)
-            critic_q = self.critic([states, actions])
-            loss = -tf.reduce_mean(critic_q)
-
-        grads = tape.gradient(loss, self.actor.trainable_variables)
-        self.actor_opt.apply_gradients(zip(grads, self.actor.trainable_variables))
-        return loss
 
     def td_target(self, rewards, q_values, dones):
         y_k = np.asarray(q_values)
@@ -188,10 +173,20 @@ class DDPGagent(object):
                                                     self.target_actor(
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
                     y_i = self.td_target(rewards, target_qs.numpy(), dones)
-                    critic_loss = self.critic_learn(tf.convert_to_tensor(states, dtype=tf.float32),
-                                                    tf.convert_to_tensor(actions, dtype=tf.float32),
-                                                    tf.convert_to_tensor(y_i, dtype=tf.float32))
-                    actor_loss = self.actor_learn(tf.convert_to_tensor(states, dtype=tf.float32))
+
+                    with tf.GradientTape() as tape:
+                        q = self.critic([states, actions], training=True)
+                        loss = tf.reduce_mean(tf.square(q - y_i))
+                    critic_grads = tape.gradient(loss, self.critic.trainable_variables)
+                    self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
+
+                    with tf.GradientTape() as tape:
+                        actions = self.actor(states, training=True)
+                        critic_q = self.critic([states, actions])
+                        loss = -tf.reduce_mean(critic_q)
+                    actor_grads = tape.gradient(loss, self.actor.trainable_variables)
+                    self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
+
                     self.update_target_network(self.tau)
 
                 pre_noise = noise
@@ -208,4 +203,12 @@ class DDPGagent(object):
             print(log)
             self.save_episode_reward.append(episode_reward)
             self.draw_tensorboard(episode_reward, ep)
-            self.save_weights('models/2023-03-22-12-16-00/')
+            self.save_weights('./models/2023-03-24-17-17-00/')
+
+            # if ep % 100 == 99:
+            #     del self.env
+            #     os.system('taskkill /im Coastline.exe /t /f')
+            #     time.sleep(3)
+            #     os.system('start /d "C:\\Coastline (2)\\Coastline\\WindowsNoEditor" run.bat')
+            #     time.sleep(5)
+            #     self.env = gym.make('car_env-v0', ip_address='127.0.0.1')
