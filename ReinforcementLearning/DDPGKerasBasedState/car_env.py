@@ -117,7 +117,11 @@ class AirSimCarEnv(AirSimEnv):
 
     def _do_action(self, action):
         self.car_controls.brake = 0
-        self.car_controls.throttle = 0.5
+        # self.car_controls.throttle = 0.5
+        if self.car_state.speed < 5:
+            self.car_controls.throttle = 1
+        else:
+            self.car_controls.throttle = 0
         self.car_controls.steering = float(action)
 
         self.car.setCarControls(self.car_controls)
@@ -212,7 +216,7 @@ class AirSimCarEnv(AirSimEnv):
         angular_reward = (0.1 - theta / np.pi) / 10
         reward += angular_reward
         print(f'angular reward: {angular_reward}')
-        dist_reward = (0.005 - min_dist) * 10
+        dist_reward = (0.005 - min_dist) * 100
         reward += dist_reward
         print(f'distance reward: {dist_reward}')
         # reward_speed = (self.car_state.speed - min_speed) / (max_speed - min_speed)
