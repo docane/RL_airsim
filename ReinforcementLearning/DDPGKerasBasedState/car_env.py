@@ -76,7 +76,7 @@ class AirSimCarEnv(AirSimEnv):
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
-             np.finfo(np.float32).min],
+             np.finfo(np.float32).max],
             dtype=np.float32)
 
         self.observation_space = spaces.Box(low, high, shape=(10,), dtype=np.float32)
@@ -176,7 +176,7 @@ class AirSimCarEnv(AirSimEnv):
                 [math.sqrt(((car_pt[0] - self.pts_0[i][0]) ** 2) + ((car_pt[1] - self.pts_0[i][1]) ** 2)) for i in
                  range(len(self.pts_0))])
             min_dist_index = np.argmin(dist)
-            if min_dist_index > (len(self.pts_0) - 30):
+            if min_dist_index > (len(self.pts_0) - 56):
                 self.direction = 1
 
         elif self.direction == 1:
@@ -184,7 +184,7 @@ class AirSimCarEnv(AirSimEnv):
                 [math.sqrt(((car_pt[0] - self.pts_1[i][0]) ** 2) + ((car_pt[1] - self.pts_1[i][1]) ** 2)) for i in
                  range(len(self.pts_1))])
             min_dist_index = np.argmin(dist)
-            if min_dist_index > (len(self.pts_1) - 30):
+            if min_dist_index > (len(self.pts_1) - 45):
                 self.direction = 0
 
         if self.direction == 0:
@@ -271,21 +271,21 @@ class AirSimCarEnv(AirSimEnv):
         theta = math.acos(ip)
         # if self.direction == 1:
         #     theta = np.pi - theta
-        angular_reward = (1 / (theta / np.pi) / 10)
+        angular_reward = (1 / (theta / np.pi) / 100)
         print('Angular Reward:', angular_reward)
 
         reward = angular_reward
 
         done = 0
         if self.state['collision']:
-            # reward -= 0.1
+            # reward -= 10
             done = 1
 
         return reward, done
 
     def step(self, action):
         self._do_action(action)
-        # time.sleep(0.5)
+        time.sleep(0.5)
         obs = self._get_obs()
         reward, done = self._compute_reward()
         return obs, reward, done, {}
