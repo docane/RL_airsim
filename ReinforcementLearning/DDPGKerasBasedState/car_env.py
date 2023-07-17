@@ -99,7 +99,8 @@ class AirSimCarEnv(AirSimEnv):
         # print(self.car.simGetVehiclePose())
         # print(len(self.trajectory))
 
-        self.rand = np.random.randint(0, len(self.trajectory) - 200)
+        # self.rand = np.random.randint(0, len(self.trajectory) - 200)
+        self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
         # print(randrow['POS_X'])
         self.car.simSetVehiclePose(airsim.Pose(airsim.Vector3r(randrow['POS_X'],
@@ -213,11 +214,16 @@ class AirSimCarEnv(AirSimEnv):
         theta = math.acos(cost)
         reward = 0
 
-        angular_reward = (0.1 - theta / np.pi) / 10
+        angular_reward = (0.3 - theta / np.pi) / 10
         reward += angular_reward
         print(f'angular reward: {angular_reward}')
-        dist_reward = (0.005 - min_dist) * 100
-        reward += dist_reward
+        dist_reward = (0.001 - min_dist) * 100
+        if reward > 0:
+            if dist_reward > 0:
+                reward *= dist_reward
+        if reward < 0:
+            if dist_reward < 0:
+                reward *= -dist_reward
         print(f'distance reward: {dist_reward}')
         # reward_speed = (self.car_state.speed - min_speed) / (max_speed - min_speed)
         # reward += reward_speed
