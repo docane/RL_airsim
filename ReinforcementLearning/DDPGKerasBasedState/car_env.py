@@ -43,8 +43,8 @@ class AirSimCarEnv(AirSimEnv):
             'position': np.zeros(3),
             'pose': np.zeros(3),
             'prepose': np.zeros(3),
-            'linear_velocity': np.zeros(2),
-            'angular_velocity': np.zeros(2)
+            'linear_velocity': np.zeros(3),
+            'angular_velocity': np.zeros(3)
         }
 
         self.car = airsim.CarClient(ip=ip_address)
@@ -80,14 +80,14 @@ class AirSimCarEnv(AirSimEnv):
         # self.min_x = np.min(self.x)
         # self.max_y = np.max(self.y)
         # self.min_y = np.min(self.y)
-        self.max_x = 1000
-        self.min_x = -1000
-        self.max_y = 1000
-        self.min_y = -1000
-        self.velocity_divide = 2000
-
-        self.x = (self.x - self.min_x) / (self.max_x - self.min_x)
-        self.y = (self.y - self.min_y) / (self.max_y - self.min_y)
+        # self.max_x = 1000
+        # self.min_x = -1000
+        # self.max_y = 1000
+        # self.min_y = -1000
+        # self.velocity_divide = 2000
+        #
+        # self.x = (self.x - self.min_x) / (self.max_x - self.min_x)
+        # self.y = (self.y - self.min_y) / (self.max_y - self.min_y)
 
     def _setup_car(self):
         self.car.reset()
@@ -121,13 +121,13 @@ class AirSimCarEnv(AirSimEnv):
 
     def _do_action(self, action):
         self.car_controls.brake = 0
-        # self.car_controls.throttle = 0.5
-        if self.car_state.speed < 4:
-            self.car_controls.throttle = 1
-        elif self.car_state < 5:
-            self.car_controls.throttle = 0.5
-        else:
-            self.car_controls.throttle = 0
+        self.car_controls.throttle = 0.5
+        # if self.car_state.speed < 4:
+        #     self.car_controls.throttle = 1
+        # elif self.car_state.speed < 5:
+        #     self.car_controls.throttle = 0.5
+        # else:
+        #     self.car_controls.throttle = 0
         self.car_controls.steering = float(action)
 
         self.car.setCarControls(self.car_controls)
@@ -141,15 +141,15 @@ class AirSimCarEnv(AirSimEnv):
 
         # self.state['position'] = self.car_state.kinematics_estimated.position.to_numpy_array()
         self.state['position'] = kin_est.position.to_numpy_array()
-        self.state['position'][0] = (self.state['position'][0] - self.min_x) / (self.max_x - self.min_x)
-        self.state['position'][1] = (self.state['position'][1] - self.min_y) / (self.max_y - self.min_y)
+        # self.state['position'][0] = (self.state['position'][0] - self.min_x) / (self.max_x - self.min_x)
+        # self.state['position'][1] = (self.state['position'][1] - self.min_y) / (self.max_y - self.min_y)
 
         # self.state['pose'] = airsim.to_eularian_angles(self.car_state.kinematics_estimated.orientation)
         self.state['pose'] = airsim.to_eularian_angles(kin_est.orientation)
 
         # self.state['linear_velocity'] = self.car_state.kinematics_estimated.linear_velocity.to_numpy_array()
         # self.state['angular_velocity'] = self.car_state.kinematics_estimated.angular_velocity.to_numpy_array()
-        self.state['linear_velocity'] = kin_est.linear_velocity.to_numpy_array() / 2000
+        self.state['linear_velocity'] = kin_est.linear_velocity.to_numpy_array()
         self.state['angular_velocity'] = kin_est.angular_velocity.to_numpy_array()
         # print(self.state['linear_velocity'])
         # print(self.state['angular_velocity'])
@@ -163,7 +163,7 @@ class AirSimCarEnv(AirSimEnv):
         for v in self.state['linear_velocity'][:2]:
             temp.append(v)
         temp.append(self.state['angular_velocity'][2])
-        print(np.array(temp))
+        # print(np.array(temp))
 
         return np.array(temp)
 
@@ -175,8 +175,11 @@ class AirSimCarEnv(AirSimEnv):
         pts = [np.array([self.x[i], self.y[i]]) for i in range(len(self.x))]
         car_pre_pt = self.state['preposition'][:2]
         car_pt = self.state['position'][:2]
+        reward = 0
+        done = 0
 
         ###########################################################################################################
+
         # print(car_pt)
         # dist = 10000000
         # print(len(pts))
@@ -225,8 +228,9 @@ class AirSimCarEnv(AirSimEnv):
         #
         # angular_reward = (0.35 - theta / np.pi) / 10
         # reward += angular_reward
-        # # print(f'angular reward: {angular_reward}')
-        # dist_reward = (0.003 - min_dist) * 100
+        # print(f'angular reward: {angular_reward}')
+        # # dist_reward = (0.003 - min_dist)
+        # dist_reward = gaussian(min_dist, sigma=0.5) - 0.2
         # if reward > 0:
         #     if dist_reward > 0:
         #         reward *= dist_reward
@@ -237,24 +241,42 @@ class AirSimCarEnv(AirSimEnv):
         # reward_speed = (self.car_state.speed - min_speed) / (max_speed - min_speed)
         # reward += reward_speed
         # print(f'speed reward: {reward_speed}')
+        #
+        # done = 0
+        # if min_dist > 2:
+        #     reward -= 3
+        #     done = 1
 
         #################################################################################################
 
-        temp = np.array(
-                [math.sqrt(((car_pt[0] - pts[i][0]) ** 2) + ((car_pt[1] - pts[i][1]) ** 2)) for i in range(len(pts))])
-        min_dist = np.nanmin(temp)
-        min_dist *= 2000
-        print(min_dist)
-        reward = 0.1
-        done = 0
-        if min_dist > 2:
-            reward -= 1
-            done = 1
+        # temp = np.array(
+        #         [math.sqrt(((car_pt[0] - pts[i][0]) ** 2) + ((car_pt[1] - pts[i][1]) ** 2)) for i in range(len(pts))])
+        # min_dist = np.nanmin(temp)
+        # # min_dist *= 2000
+        # # print(min_dist)
+        # reward = gaussian(min_dist, sigma=0.5) * 10
+        # print(reward)
+        # done = 0
+        # if min_dist > 2:
+        #     reward -= 10
+        #     done = 1
 
         # done = 0
         # if self.state['collision']:
         #     reward -= 3
         #     done = 1
+
+        #################################################################################################
+
+        temp = np.array(
+            [math.sqrt(((car_pt[0] - pts[i][0]) ** 2) + ((car_pt[1] - pts[i][1]) ** 2)) for i in range(len(pts))])
+        min_dist = np.nanmin(temp)
+        print(min_dist)
+        min_dist_index = np.argmin(temp)
+        print(min_dist_index)
+
+        if self.state['collision']:
+            done = 1
 
         return reward, done
 
@@ -263,7 +285,7 @@ class AirSimCarEnv(AirSimEnv):
         obs = self._get_obs()
         reward, done = self._compute_reward()
         # time.sleep(0.25)
-        time.sleep(0.1)
+        time.sleep(0.5)
         return obs, reward, done, {}
 
     def reset(self):
