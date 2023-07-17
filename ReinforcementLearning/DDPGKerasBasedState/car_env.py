@@ -46,13 +46,15 @@ class AirSimCarEnv(AirSimEnv):
             'angular_velocity': np.zeros(3),
             'target_point': np.zeros(2),
             'next_target_point': np.zeros(2),
-            'angle': np.zeros(1)
+            'angle': np.zeros(1),
+            'track_distance': np.zeros(1)
         }
 
         self.car = airsim.CarClient(ip=ip_address)
 
         low = np.array(
             [np.finfo(np.float32).min,
+             np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
@@ -72,10 +74,11 @@ class AirSimCarEnv(AirSimEnv):
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
+             np.finfo(np.float32).max,
              np.finfo(np.float32).max],
             dtype=np.float32)
 
-        self.observation_space = spaces.Box(low, high, shape=(9,), dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(10,), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
         self.car_controls = airsim.CarControls()
@@ -223,6 +226,16 @@ class AirSimCarEnv(AirSimEnv):
         theta = math.asin(ip)
         self.state['angle'][0] = theta
 
+        min_dist = np.min(dist)
+        if self.pts[min_dist_index][1] < car_pt[1]:
+            pass
+        else:
+            if self.pts[min_dist_index][0] < car_pt[0]:
+                pass
+            else:
+                min_dist = -min_dist
+        self.state['track_distance'][0] = min_dist
+
         temp = []
         for v in self.state['position'][:2]:
             temp.append(v)
@@ -233,6 +246,7 @@ class AirSimCarEnv(AirSimEnv):
         for v in self.state['next_target_point'][:2]:
             temp.append(v)
         temp.append(self.state['angle'][0] / np.pi)
+        temp.append(self.state['track_distance'][0])
 
         return np.array(temp)
 
