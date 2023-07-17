@@ -23,8 +23,8 @@ class Actor(Model):
 
         self.action_size = action_dim
 
-        self.dense1 = Dense(120, activation='relu')
-        self.dense2 = Dense(240, activation='relu')
+        self.dense1 = Dense(100, activation='relu')
+        self.dense2 = Dense(200, activation='relu')
         self.action = Dense(self.action_size, activation='tanh')
 
     def call(self, x):
@@ -38,10 +38,10 @@ class Actor(Model):
 class Critic(Model):
     def __init__(self):
         super(Critic, self).__init__()
-        self.x1 = Dense(120, activation='relu')
-        self.x2 = Dense(240, activation='relu')
-        self.a1 = Dense(240, activation='relu')
-        self.h1 = Dense(240, activation='relu')
+        self.x1 = Dense(100, activation='relu')
+        self.x2 = Dense(200, activation='relu')
+        self.a1 = Dense(200, activation='relu')
+        self.h1 = Dense(200, activation='relu')
         self.q = Dense(1, activation='linear')
 
     def call(self, state_action):
@@ -139,7 +139,6 @@ class DDPGagent(object):
     def get_action(self, state):
         action = self.actor(tf.convert_to_tensor([state], dtype=tf.float32))
         action = action.numpy()[0]
-        action = np.clip(action, self.action_bound_low, self.action_bound_high)
         return action
 
     def draw_tensorboard(self, score, e):
@@ -163,12 +162,10 @@ class DDPGagent(object):
 
                 if self.buffer.buffer_count() > 500:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
-                    print(rewards)
 
                     target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
                                                     self.target_actor(
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
-                    print(target_qs)
                     y_i = self.td_target(rewards, target_qs.numpy(), dones)
 
                     # 크리틱 신경망 업데이트
