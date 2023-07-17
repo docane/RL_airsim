@@ -1,12 +1,11 @@
 import datetime as dt
 import numpy as np
 from keras.models import Model
-from keras.layers import Input, Dense, concatenate
+from keras.layers import Input, Dense, concatenate, BatchNormalization
 from keras.optimizers import Adam
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
 import os
-import pickle
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -25,12 +24,16 @@ class Actor(Model):
         self.action_size = action_dim
 
         self.dense1 = Dense(300, activation='relu')
+        self.bn1 = BatchNormalization()
         self.dense2 = Dense(600, activation='relu')
+        self.bn2 = BatchNormalization()
         self.action = Dense(self.action_size, activation='tanh')
 
     def call(self, x):
         x = self.dense1(x)
+        x = self.bn1(x)
         x = self.dense2(x)
+        x = self.bn2(x)
         action = self.action(x)
 
         return action
@@ -40,9 +43,13 @@ class Critic(Model):
     def __init__(self):
         super(Critic, self).__init__()
         self.x1 = Dense(300, activation='relu')
+        self.bn1 = BatchNormalization()
         self.x2 = Dense(600, activation='relu')
+        self.bn2 = BatchNormalization()
         self.a1 = Dense(600, activation='relu')
+        self.bn3 = BatchNormalization()
         self.h1 = Dense(600, activation='relu')
+        self.bn4 = BatchNormalization()
         self.q = Dense(1, activation='linear')
 
     def call(self, state_action):
@@ -50,10 +57,14 @@ class Critic(Model):
         action = state_action[1]
 
         x = self.x1(state)
+        x = self.bn1(x)
         x = self.x2(x)
+        x = self.bn2(x)
         a = self.a1(action)
+        a = self.bn3(a)
         h = concatenate([x, a], axis=-1)
         x = self.h1(h)
+        x = self.bn4(x)
         q = self.q(x)
         return q
 
@@ -94,8 +105,8 @@ class DDPGagent(object):
         self.critic.summary()
 
         self.buffer = ReplayBuffer(self.buffer_size)
-        with open('data/buffer.pkl', 'rb') as f:
-            self.buffer = pickle.load(f)
+
+        self.save_episode_reward = []
 
         self.writer = tf.summary.create_file_writer(
             f'summary/airsim_ddpg_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}')
@@ -200,6 +211,7 @@ class DDPGagent(object):
             log += f' Actor Loss: {actor_loss}'
             log += f' Critic Loss: {critic_loss}'
             print(log)
+            self.save_episode_reward.append(episode_reward)
             self.draw_tensorboard(episode_reward, ep)
             self.save_weights(self.save_model_dir)
 
