@@ -115,8 +115,8 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls.steering = 0
         self.car.setCarControls(self.car_controls)
 
-        self.rand = np.random.randint(0, len(self.trajectory) - 200)
-        # self.rand = 0
+        # self.rand = np.random.randint(0, len(self.trajectory) - 200)
+        self.rand = 0
         randrow = self.trajectory.iloc[self.rand]
         self.car.simSetVehiclePose(
             airsim.Pose(airsim.Vector3r(randrow['POS_X'],
@@ -249,7 +249,12 @@ class AirSimCarEnv(AirSimEnv):
         angular_reward = (1 / (theta / np.pi) / 10)
         print('Angular Reward:', angular_reward)
 
+        min_dist = min(np.linalg.norm(self.pts - car_pt, axis=1))
+        distance_reward = 1 / (min_dist * 5000)
+        print('Distance Reward:', distance_reward)
+
         reward = angular_reward
+        reward += distance_reward
 
         done = 0
         if self.state['collision']:
@@ -261,7 +266,7 @@ class AirSimCarEnv(AirSimEnv):
 
     def step(self, action):
         self._do_action(action)
-        time.sleep(0.5)
+        # time.sleep(0.5)
         obs = self._get_obs()
         reward, done = self._compute_reward()
         return obs, reward, done, {}
