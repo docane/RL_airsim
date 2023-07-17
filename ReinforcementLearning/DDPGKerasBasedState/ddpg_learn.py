@@ -6,6 +6,7 @@ from keras.optimizers import Adam
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
 import os
+import pickle
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -23,12 +24,8 @@ class Actor(Model):
 
         self.action_size = action_dim
 
-        self.dense1 = Dense(300, activation='relu',
-                            kernel_regularizer=tf.keras.regularizers.l2(),
-                            bias_regularizer=tf.keras.regularizers.l2())
-        self.dense2 = Dense(600, activation='relu',
-                            kernel_regularizer=tf.keras.regularizers.l2(),
-                            bias_regularizer=tf.keras.regularizers.l2())
+        self.dense1 = Dense(300, activation='relu')
+        self.dense2 = Dense(600, activation='relu')
         self.action = Dense(self.action_size, activation='tanh')
 
     def call(self, x):
@@ -42,18 +39,10 @@ class Actor(Model):
 class Critic(Model):
     def __init__(self):
         super(Critic, self).__init__()
-        self.x1 = Dense(300, activation='relu',
-                        kernel_regularizer=tf.keras.regularizers.l2(),
-                        bias_regularizer=tf.keras.regularizers.l2())
-        self.x2 = Dense(600, activation='relu',
-                        kernel_regularizer=tf.keras.regularizers.l2(),
-                        bias_regularizer=tf.keras.regularizers.l2())
-        self.a1 = Dense(600, activation='relu',
-                        kernel_regularizer=tf.keras.regularizers.l2(),
-                        bias_regularizer=tf.keras.regularizers.l2())
-        self.h1 = Dense(600, activation='relu',
-                        kernel_regularizer=tf.keras.regularizers.l2(),
-                        bias_regularizer=tf.keras.regularizers.l2())
+        self.x1 = Dense(300, activation='relu')
+        self.x2 = Dense(600, activation='relu')
+        self.a1 = Dense(600, activation='relu')
+        self.h1 = Dense(600, activation='relu')
         self.q = Dense(1, activation='linear')
 
     def call(self, state_action):
@@ -105,8 +94,8 @@ class DDPGagent(object):
         self.critic.summary()
 
         self.buffer = ReplayBuffer(self.buffer_size)
-
-        self.save_episode_reward = []
+        with open('data/buffer.pkl', 'rb') as f:
+            self.buffer = pickle.load(f)
 
         self.writer = tf.summary.create_file_writer(
             f'summary/airsim_ddpg_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}')
@@ -211,7 +200,6 @@ class DDPGagent(object):
             log += f' Actor Loss: {actor_loss}'
             log += f' Critic Loss: {critic_loss}'
             print(log)
-            self.save_episode_reward.append(episode_reward)
             self.draw_tensorboard(episode_reward, ep)
             self.save_weights(self.save_model_dir)
 
