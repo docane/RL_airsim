@@ -64,7 +64,7 @@ class DDPGagent(object):
         self.buffer_size = 1000
         self.actor_learning_rate = 0.0001
         self.critic_learning_rate = 0.001
-        self.tau = 0.0001
+        self.tau = 0.001
 
         self.env = env
         self.state_dim = env.observation_space.shape[0]
@@ -111,6 +111,7 @@ class DDPGagent(object):
             target_phi[i] = tau * phi[i] + (1 - tau) * target_phi[i]
         self.target_critic.set_weights(target_phi)
 
+    # TD 타겟 계산
     def td_target(self, rewards, q_values, dones):
         y_k = np.asarray(q_values)
         for i in range(q_values.shape[0]):
@@ -119,6 +120,27 @@ class DDPGagent(object):
             else:
                 y_k[i] = rewards[i] * self.gamma * q_values[i]
         return y_k
+
+    # 크리틱 신경망 업데이트
+    def critic_learn(self, states, actions, td_targets):
+        with tf.GradientTape() as tape_c:
+            q = self.critic([states, actions], training=True)
+            critic_loss = tf.reduce_mean(tf.square(q - td_targets))
+        critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
+        critic_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in critic_grads]
+        self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
+        return critic_loss
+
+    # 액터 신경망 업데이트
+    def actor_learn(self, states):
+        with tf.GradientTape() as tape_a:
+            actions = self.actor(states, training=True)
+            critic_q = self.critic([states, actions])
+            actor_loss = -tf.reduce_mean(critic_q)
+        actor_grads = tape_a.gradient(actor_loss, self.actor.trainable_variables)
+        actor_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in actor_grads]
+        self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
+        return actor_loss
 
     @staticmethod
     def ou_noise(x, rho=0.15, mu=0, dt=1e-1, sigma=0.2, dim=1):
@@ -139,19 +161,22 @@ class DDPGagent(object):
         action = action.numpy()[0]
         return action
 
-    def draw_tensorboard(self, score, e):
+    def draw_tensorboard(self, episode, score, avg_step, actor_loss, critic_loss):
         with self.writer.as_default():
-            tf.summary.scalar('Total Reward/Episode', score, step=e)
+            tf.summary.scalar('Total Reward/Episode', score, step=episode)
+            tf.summary.scalar('Average Step/Episode', avg_step, step=episode)
+            tf.summary.scalar('Actor Loss/Episode', actor_loss, step=episode)
+            tf.summary.scalar('Critic Loss/Episode', critic_loss, step=episode)
 
     def train(self, max_episode_max):
         self.update_target_network(1.0)
         total_time = 0
-        step_avg = 0
+        avg_step = 0
         for ep in range(int(max_episode_max)):
             pre_noise = np.zeros(self.action_dim)
             step, episode_reward, done = 0, 0, False
+            actor_losses, critic_losses = np.array([]), np.array([])
             state = self.env.reset()
-            actor_loss, critic_loss = 0, 0
             while not done:
                 action = self.get_action(state)
                 noise = self.ou_noise(pre_noise, dim=self.action_dim)
@@ -161,30 +186,17 @@ class DDPGagent(object):
 
                 if self.buffer.buffer_count() > 500:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
-
                     target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
                                                     self.target_actor(
                                                         tf.convert_to_tensor(next_states, dtype=tf.float32))])
-                    y_i = self.td_target(rewards, target_qs.numpy(), dones)
+                    td_targets = self.td_target(rewards, target_qs.numpy(), dones)
 
-                    # 크리틱 신경망 업데이트
-                    with tf.GradientTape() as tape_c:
-                        q = self.critic([states, actions], training=True)
-                        critic_loss = tf.reduce_mean(tf.square(q - y_i))
-                    critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
-                    critic_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in critic_grads]
-                    self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
-
-                    # 액터 신경망 업데이트
-                    with tf.GradientTape() as tape_a:
-                        actions = self.actor(states, training=True)
-                        critic_q = self.critic([states, actions])
-                        actor_loss = -tf.reduce_mean(critic_q)
-                    actor_grads = tape_a.gradient(actor_loss, self.actor.trainable_variables)
-                    actor_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in actor_grads]
-                    self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
+                    critic_loss = self.critic_learn(states, actions, td_targets)
+                    actor_loss = self.actor_learn(states)
 
                     self.update_target_network(self.tau)
+                    critic_losses = np.append(critic_losses, critic_loss)
+                    actor_losses = np.append(actor_losses, actor_loss)
 
                 pre_noise = noise
                 state = next_state
@@ -192,19 +204,23 @@ class DDPGagent(object):
                 step += 1
 
             total_time += step
-            step_avg = 0.9 * step_avg + 0.1 * step if step_avg != 0 else step
+            avg_step = 0.9 * avg_step + 0.1 * step if avg_step != 0 else step
+            avg_critic_loss = np.round(critic_losses.mean(), 5)
+            avg_actor_loss = np.round(actor_losses.mean(), 5)
+
             log = f'Episode: {ep + 1}'
             log += f' Step: {step}'
             log += f' Total Time: {total_time}'
-            log += f' Avg Step: {step_avg}'
+            log += f' Avg Step: {round(avg_step, 2)}'
             log += f' Reward: {round(episode_reward, 2)}'
-            log += f' Actor Loss: {actor_loss}'
-            log += f' Critic Loss: {critic_loss}'
+            log += f' Actor Loss: {avg_actor_loss}'
+            log += f' Critic Loss: {avg_critic_loss}'
             print(log)
-            self.draw_tensorboard(episode_reward, ep)
+
+            self.draw_tensorboard(ep, episode_reward, avg_step, avg_actor_loss, avg_critic_loss)
             self.save_weights(self.save_model_dir)
 
-            if step_avg > 1000:
+            if avg_step > 150:
                 break
 
             # if ep % 100 == 99:
