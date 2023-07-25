@@ -118,6 +118,7 @@ class AirSimCarEnv(AirSimEnv):
             start_index = 0
         else:
             start_index = np.random.randint(0, len(self.trajectory) - 200)
+        # start_index = 0
         self._car_position_init(start_index)
         self._do_action(0)
 
@@ -220,19 +221,16 @@ class AirSimCarEnv(AirSimEnv):
         angular_reward = (1 / (theta / np.pi) / 10)
         print('Angular Reward:', angular_reward)
 
-        min_dist = min(np.linalg.norm(self.pts - car_pt, axis=1)) * 2000
-        print(min_dist)
-        distance_reward = 0.5 if min_dist < 1.5 else 0
+        min_dist = min(np.linalg.norm(self.pts - car_pt, axis=1))
+        distance_reward = 1 / (min_dist * 5000)
         print('Distance Reward:', distance_reward)
 
         reward = angular_reward
         reward += distance_reward
 
         done = self._check_done()
-        # if done:
-        #     reward += 100
         if self.state['collision']:
-            # reward -= 1
+            reward -= 1
             done = 1
 
         return reward, done

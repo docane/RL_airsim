@@ -61,7 +61,7 @@ class DDPGagent(object):
     def __init__(self, env):
         self.gamma = 0.99
         self.batch_size = 64
-        self.buffer_size = 1000
+        self.buffer_size = 10000
         self.actor_learning_rate = 0.0001
         self.critic_learning_rate = 0.001
         self.tau = 0.001
@@ -94,9 +94,9 @@ class DDPGagent(object):
 
         self.buffer = ReplayBuffer(self.buffer_size)
 
-        self.writer = tf.summary.create_file_writer(
-            f'summary/airsim_ddpg_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}')
-        self.save_model_dir = f'./models/airsim_ddpg_model_{dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}/'
+        self.now = dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        self.writer = None
+        self.save_model_dir = f'./models/airsim_ddpg_model_{self.now}/'
 
     def update_target_network(self, tau):
         theta = self.actor.get_weights()
@@ -118,26 +118,26 @@ class DDPGagent(object):
             if dones[i]:
                 y_k[i] = rewards[i]
             else:
-                y_k[i] = rewards[i] * self.gamma * q_values[i]
+                y_k[i] = rewards[i] + self.gamma * q_values[i]
         return y_k
 
     # 크리틱 신경망 업데이트
     def critic_learn(self, states, actions, td_targets):
-        with tf.GradientTape() as tape_c:
+        with tf.GradientTape() as tape:
             q = self.critic([states, actions], training=True)
             critic_loss = tf.reduce_mean(tf.square(q - td_targets))
-        critic_grads = tape_c.gradient(critic_loss, self.critic.trainable_variables)
+        critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
         critic_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in critic_grads]
         self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
         return critic_loss
 
     # 액터 신경망 업데이트
     def actor_learn(self, states):
-        with tf.GradientTape() as tape_a:
+        with tf.GradientTape() as tape:
             actions = self.actor(states, training=True)
             critic_q = self.critic([states, actions])
             actor_loss = -tf.reduce_mean(critic_q)
-        actor_grads = tape_a.gradient(actor_loss, self.actor.trainable_variables)
+        actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
         actor_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in actor_grads]
         self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
         return actor_loss
@@ -170,6 +170,7 @@ class DDPGagent(object):
 
     def train(self, max_episode_max):
         self.update_target_network(1.0)
+        self.writer = tf.summary.create_file_writer(f'summary/airsim_ddpg_{self.now}')
         total_time = 0
         avg_step = 0
         for ep in range(int(max_episode_max)):
@@ -205,8 +206,8 @@ class DDPGagent(object):
 
             total_time += step
             avg_step = 0.9 * avg_step + 0.1 * step if avg_step != 0 else step
-            avg_critic_loss = np.round(critic_losses.mean(), 5)
-            avg_actor_loss = np.round(actor_losses.mean(), 5)
+            avg_critic_loss = np.round(critic_losses.mean(), 5) if critic_losses.size != 0 else 0
+            avg_actor_loss = np.round(actor_losses.mean(), 5) if actor_losses.size != 0 else 0
 
             log = f'Episode: {ep + 1}'
             log += f' Step: {step}'
@@ -222,11 +223,3 @@ class DDPGagent(object):
 
             if avg_step > 150:
                 break
-
-            # if ep % 100 == 99:
-            #     del self.env
-            #     os.system('taskkill /im Coastline.exe /t /f')
-            #     time.sleep(3)
-            #     os.system('start /d "C:\\Coastline (2)\\Coastline\\WindowsNoEditor" run.bat')
-            #     time.sleep(5)
-            #     self.env = gym.make('car_env-v0', ip_address='127.0.0.1')
