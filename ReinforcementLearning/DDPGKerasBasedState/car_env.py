@@ -5,7 +5,6 @@ import time
 import airsim
 import pandas as pd
 from airsim import Vector3r
-import sys
 
 
 class AirSimEnv(gym.Env):
@@ -76,7 +75,6 @@ class AirSimCarEnv(AirSimEnv):
             dtype=np.float32)
 
         self.observation_space = spaces.Box(low, high, shape=(9,), dtype=np.float32)
-
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
         self.car_controls = airsim.CarControls()
@@ -105,6 +103,7 @@ class AirSimCarEnv(AirSimEnv):
             distance = np.linalg.norm(self.pts[i] - self.pts[self.temp[-1]])
             if distance > (5 / 2000):
                 self.temp.append(i)
+        self.temp = np.array(self.temp)
 
         self.car.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.pts_1], is_persistent=True)
         self._success = False
@@ -155,16 +154,13 @@ class AirSimCarEnv(AirSimEnv):
         min_dist_index = dist.argmin()
 
         min_dist_temp_index = 0
-
         for i in range(len(self.temp)):
             if min_dist_index < self.temp[i]:
                 min_dist_temp_index = i - 1
                 break
-        route_point = [index for index in range(min_dist_temp_index, min_dist_temp_index + 3)]
+        self.route_point = [index for index in range(min_dist_temp_index, min_dist_temp_index + 3)]
 
-        self.target_point = np.array(
-            [(self.pts[self.temp[route_point[2]]][0] + car_pt[0]) / 2,
-             (self.pts[self.temp[route_point[2]]][1] + car_pt[1]) / 2])
+        self.target_point = (self.pts[self.temp[self.route_point[2]]] + car_pt) / 2
         v1 = self.target_point - car_pt[:2]
         v1_norm = np.linalg.norm(v1)
         v2 = (v1 / v1_norm) * 5
@@ -176,13 +172,13 @@ class AirSimCarEnv(AirSimEnv):
 
         # 바로 뒤에 있는 타겟 포인트
         first_target_point = np.array(
-            [self.pts[self.temp[route_point[0]]][0],
-             self.pts[self.temp[route_point[0]]][1]])
+            [self.pts[self.temp[self.route_point[0]]][0],
+             self.pts[self.temp[self.route_point[0]]][1]])
 
         # 바로 앞에 있는 타겟 포인트
         second_target_point = np.array(
-            [self.pts[self.temp[route_point[1]]][0],
-             self.pts[self.temp[route_point[1]]][1]])
+            [self.pts[self.temp[self.route_point[1]]][0],
+             self.pts[self.temp[self.route_point[1]]][1]])
 
         car_vel = self.state['linear_velocity'][:2]
         car_vel_norm = np.linalg.norm(car_vel)
@@ -210,27 +206,31 @@ class AirSimCarEnv(AirSimEnv):
     def _compute_reward(self):
         car_pt = self.state['position'][:2]
         car_vel = self.state['linear_velocity'][:2]
-
-        v1 = self.target_point - car_pt[:2]
-        v1_norm = np.linalg.norm(v1)
         car_vel_norm = np.linalg.norm(car_vel)
-        car_dir_vec = car_vel / (car_vel_norm + 0.00001)
-        target_dir_vec = v1 / (v1_norm + 0.00001)
-        ip = np.dot(car_dir_vec, target_dir_vec)
-        theta = np.arccos(ip)
-        angular_reward = (1 / (theta / np.pi) / 10)
-        print('Angular Reward:', angular_reward)
 
-        min_dist = min(np.linalg.norm(self.pts - car_pt, axis=1))
-        distance_reward = 1 / (min_dist * 5000)
-        print('Distance Reward:', distance_reward)
+        first_target_point = self.pts[self.temp[self.route_point[0]]]
+        second_target_point = self.pts[self.temp[self.route_point[1]]]
+        track_vector = second_target_point - first_target_point
+        track_vector_norm = np.linalg.norm(track_vector)
 
-        reward = angular_reward
-        reward += distance_reward
+        dot_product = np.dot(track_vector, car_vel)
+        angle_radian = np.arccos(np.clip(dot_product / (track_vector_norm * car_vel_norm), -1, 1)) if car_vel_norm != 0 else -1
+        if angle_radian != -1:
+            vxcostheta = car_vel_norm * np.cos(angle_radian)
+            vxsintheta = car_vel_norm * np.sin(angle_radian)
+        else:
+            vxcostheta = 0
+            vxsintheta = 0
+
+        trackpos = min(np.linalg.norm(self.pts - car_pt, axis=1))
+        vxtrackpos = trackpos * car_vel_norm
+
+        reward = (vxcostheta - vxsintheta - trackpos - 100 * vxtrackpos) * 1000
+        print('Reward:', reward)
 
         done = self._check_done()
         if self.state['collision']:
-            reward -= 1
+            # reward -= 1
             done = 1
 
         return reward, done
@@ -282,6 +282,6 @@ class AirSimCarEnv(AirSimEnv):
             self._success = False
             return False
 
-
-def gaussian(x, mean=0.0, sigma=1.0):
-    return (1 / np.sqrt(2 * np.pi * sigma ** 2)) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))
+    @staticmethod
+    def gaussian(x, mean=0.0, sigma=1.0):
+        return (1 / np.sqrt(2 * np.pi * sigma ** 2)) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))
