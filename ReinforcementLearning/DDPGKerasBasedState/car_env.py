@@ -159,9 +159,7 @@ class AirSimCarEnv(AirSimEnv):
                 min_dist_temp_index = i - 1
                 break
         self.route_point = [index for index in range(min_dist_temp_index, min_dist_temp_index + 3)]
-
-        self.target_point = (self.pts[self.temp[self.route_point[2]]] + car_pt) / 2
-        v1 = self.target_point - car_pt[:2]
+        v1 = self.pts[self.temp[self.route_point[2]]] - car_pt
         v1_norm = np.linalg.norm(v1)
         v2 = (v1 / v1_norm) * 5
 
@@ -170,36 +168,30 @@ class AirSimCarEnv(AirSimEnv):
         self.state['next_target_point'][0] = v2[0]
         self.state['next_target_point'][1] = v2[1]
 
-        # 바로 뒤에 있는 타겟 포인트
-        first_target_point = np.array(
-            [self.pts[self.temp[self.route_point[0]]][0],
-             self.pts[self.temp[self.route_point[0]]][1]])
-
-        # 바로 앞에 있는 타겟 포인트
-        second_target_point = np.array(
-            [self.pts[self.temp[self.route_point[1]]][0],
-             self.pts[self.temp[self.route_point[1]]][1]])
+        first_target_point = self.pts[self.temp[self.route_point[0]]]
+        second_target_point = self.pts[self.temp[self.route_point[1]]]
 
         car_vel = self.state['linear_velocity'][:2]
         car_vel_norm = np.linalg.norm(car_vel)
 
-        target_dir_vec = (second_target_point - first_target_point) / np.linalg.norm(
-            first_target_point - second_target_point)
-        car_dir_vec = car_vel / (car_vel_norm + 0.00001)
+        track_vector = second_target_point - first_target_point
+        track_vector_norm = np.linalg.norm(track_vector)
+
+        target_dir_vec = track_vector / track_vector_norm
+        car_dir_vec = car_vel / car_vel_norm if car_vel_norm != 0 else car_vel * 0
         ip = car_dir_vec[0] * target_dir_vec[1] - car_dir_vec[1] * target_dir_vec[0]
         theta = np.arcsin(ip)
-        self.state['angle'][0] = theta
+        self.state['angle'][0] = theta / np.pi
 
-        temp = []
-        for v in self.state['position'][:2]:
-            temp.append(v)
-        temp.append(self.state['pose'][2])
-        for v in self.state['linear_velocity'][:2]:
-            temp.append(v)
-        temp.append(self.state['angular_velocity'][2])
-        for v in self.state['next_target_point'][:2]:
-            temp.append(v)
-        temp.append(self.state['angle'][0] / np.pi)
+        temp = [self.state['position'][0],
+                self.state['position'][1],
+                self.state['pose'][2],
+                self.state['linear_velocity'][0],
+                self.state['linear_velocity'][1],
+                self.state['angular_velocity'][2],
+                self.state['next_target_point'][0],
+                self.state['next_target_point'][1],
+                self.state['angle'][0]]
 
         return np.array(temp)
 
