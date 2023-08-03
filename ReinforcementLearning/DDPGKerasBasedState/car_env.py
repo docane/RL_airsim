@@ -45,13 +45,15 @@ class AirSimCarEnv(AirSimEnv):
             'angular_velocity': np.zeros(3),
             'target_point': np.zeros(2),
             'next_target_point': np.zeros(2),
-            'angle': np.zeros(1)
+            'angle': np.zeros(1),
+            'track_distance': np.zeros(1)
         }
 
         self.car = airsim.CarClient(ip=ip_address)
 
         low = np.array(
             [np.finfo(np.float32).min,
+             np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
              np.finfo(np.float32).min,
@@ -71,10 +73,11 @@ class AirSimCarEnv(AirSimEnv):
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
              np.finfo(np.float32).max,
+             np.finfo(np.float32).max,
              np.finfo(np.float32).max],
             dtype=np.float32)
 
-        self.observation_space = spaces.Box(low, high, shape=(9,), dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(10,), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
         self.car_controls = airsim.CarControls()
@@ -117,7 +120,7 @@ class AirSimCarEnv(AirSimEnv):
             start_index = 0
         else:
             start_index = np.random.randint(0, len(self.trajectory) - 200)
-        # start_index = 0
+        start_index = 0
         self._car_position_init(start_index)
         self._do_action(0)
 
@@ -183,6 +186,9 @@ class AirSimCarEnv(AirSimEnv):
         theta = np.arcsin(ip)
         self.state['angle'][0] = theta / np.pi
 
+        min_dist = min(dist)
+        self.state['track_distance'][0] = min_dist
+
         temp = [self.state['position'][0],
                 self.state['position'][1],
                 self.state['pose'][2],
@@ -191,7 +197,8 @@ class AirSimCarEnv(AirSimEnv):
                 self.state['angular_velocity'][2],
                 self.state['next_target_point'][0],
                 self.state['next_target_point'][1],
-                self.state['angle'][0]]
+                self.state['angle'][0],
+                self.state['track_distance'][0]]
 
         return np.array(temp)
 
@@ -229,14 +236,14 @@ class AirSimCarEnv(AirSimEnv):
 
     def step(self, action):
         self._do_action(action)
-        time.sleep(0.5)
+        # time.sleep(0.5)
         obs = self._get_obs()
         reward, done = self._compute_reward()
         return obs, reward, done, {}
 
     def reset(self):
         self._setup_car()
-        time.sleep(2)
+        # time.sleep(2)
         return self._get_obs()
 
     def close(self):

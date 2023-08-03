@@ -221,5 +221,5 @@ class DDPGagent(object):
             self.draw_tensorboard(ep, episode_reward, avg_step, avg_actor_loss, avg_critic_loss)
             self.save_weights(self.save_model_dir)
 
-            if avg_step > 150:
-                break
+            # if avg_step > 150:
+            #     break
