@@ -127,7 +127,7 @@ class DDPGagent(object):
             q = self.critic([states, actions], training=True)
             critic_loss = tf.reduce_mean(tf.square(q - td_targets))
         critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
-        critic_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in critic_grads]
+        # critic_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in critic_grads]
         self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
         return critic_loss
 
@@ -138,7 +138,7 @@ class DDPGagent(object):
             critic_q = self.critic([states, actions])
             actor_loss = -tf.reduce_mean(critic_q)
         actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
-        actor_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in actor_grads]
+        # actor_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in actor_grads]
         self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
         return actor_loss
 

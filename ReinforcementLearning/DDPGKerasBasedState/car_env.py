@@ -120,7 +120,7 @@ class AirSimCarEnv(AirSimEnv):
             start_index = 0
         else:
             start_index = np.random.randint(0, len(self.trajectory) - 200)
-        start_index = 0
+        # start_index = 0
         self._car_position_init(start_index)
         self._do_action(0)
 
@@ -236,14 +236,14 @@ class AirSimCarEnv(AirSimEnv):
 
     def step(self, action):
         self._do_action(action)
-        # time.sleep(0.5)
+        time.sleep(0.5)
         obs = self._get_obs()
         reward, done = self._compute_reward()
         return obs, reward, done, {}
 
     def reset(self):
         self._setup_car()
-        # time.sleep(2)
+        time.sleep(2)
         return self._get_obs()
 
     def close(self):
