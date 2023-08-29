@@ -83,7 +83,7 @@ class AirSimCarEnv(AirSimEnv):
         self.car_controls = airsim.CarControls()
         self.car_state = None
 
-        self.trajectory = pd.read_csv('data/airsim_rec_2.txt', sep='\t')
+        self.trajectory = pd.read_csv('data/airsim_rec_1.txt', sep='\t')
 
         pos_x = self.trajectory['POS_X'].values.astype(np.float32)
         pos_y = self.trajectory['POS_Y'].values.astype(np.float32)
@@ -98,17 +98,24 @@ class AirSimCarEnv(AirSimEnv):
         self.velocity_divide = 2000.0
 
         self.pts = np.column_stack((x, y))
-        self.pts_1 = np.column_stack((pos_x.astype(float), pos_y.astype(float), pos_z.astype(float)))
-        self.temp = [0]
+        self.coord = np.column_stack((pos_x.astype(float), pos_y.astype(float), pos_z.astype(float)))
 
-        # 5m 단위로 경로 포인트 잡기
-        for i in range(1, len(self.trajectory)):
-            distance = np.linalg.norm(self.pts[i] - self.pts[self.temp[-1]])
+        self.pts_0 = np.concatenate((self.pts[-135:], self.pts[:1000]))
+        self.pts_1 = self.pts[-950:-50]
+
+        self.temp_0 = [0]
+        for i in range(1, len(self.pts_0)):
+            distance = np.linalg.norm(self.pts_0[i] - self.pts_0[self.temp_0[-1]])
             if distance > (5 / 2000):
-                self.temp.append(i)
-        self.temp = np.array(self.temp)
+                self.temp_0.append(i)
 
-        self.car.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.pts_1], is_persistent=True)
+        self.temp_1 = [0]
+        for i in range(1, len(self.pts_1)):
+            distance = np.linalg.norm(self.pts_1[i] - self.pts_1[self.temp_1[-1]])
+            if distance > (5 / 2000):
+                self.temp_1.append(i)
+
+        self.car.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.coord], is_persistent=True)
         self._success = False
 
     def _setup_car(self):
@@ -119,8 +126,14 @@ class AirSimCarEnv(AirSimEnv):
         if self._success:
             start_index = 0
         else:
-            start_index = np.random.randint(0, len(self.trajectory) - 200)
-        # start_index = 0
+            start_index = np.random.randint(0, len(self.trajectory))
+        # start_index = 1050
+
+        if start_index < 946:
+            self.direction = 0
+        else:
+            self.direction = 1
+
         self._car_position_init(start_index)
         self._do_action(0)
 
@@ -152,6 +165,24 @@ class AirSimCarEnv(AirSimEnv):
         self.state['collision'] = self.car.simGetCollisionInfo().has_collided
 
         car_pt = self.state['position'][:2]
+
+        if self.direction == 0:
+            dist = np.linalg.norm(self.pts_0 - car_pt, axis=1)
+            min_dist_index = np.argmin(dist)
+            if min_dist_index > (len(self.pts_0) - 56):
+                self.direction = 1
+        elif self.direction == 1:
+            dist = np.linalg.norm(self.pts_1 - car_pt, axis=1)
+            min_dist_index = np.argmin(dist)
+            if min_dist_index > (len(self.pts_1) - 56):
+                self.direction = 0
+
+        if self.direction == 0:
+            self.pts = self.pts_0
+            self.temp = self.temp_0
+        else:
+            self.pts = self.pts_1
+            self.temp = self.temp_1
 
         dist = np.linalg.norm(self.pts - car_pt, axis=1)
         min_dist_index = dist.argmin()
@@ -227,7 +258,8 @@ class AirSimCarEnv(AirSimEnv):
         reward = (vxcostheta - vxsintheta - trackpos - 100 * vxtrackpos) * 1000
         print('Reward:', reward)
 
-        done = self._check_done()
+        # done = self._check_done()
+        done = 0
         if self.state['collision']:
             # reward -= 1
             done = 1
@@ -264,7 +296,7 @@ class AirSimCarEnv(AirSimEnv):
 
             time.sleep(0.1)
             car_pt = self.car.getCarState().kinematics_estimated.position.to_numpy_array()
-            min_dist = min(np.linalg.norm((self.pts_1 - car_pt), axis=1))
+            min_dist = min(np.linalg.norm((self.coord - car_pt), axis=1))
             if min_dist < 1:
                 break
 
