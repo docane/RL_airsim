@@ -25,12 +25,15 @@ class Actor(Model):
 
         self.dense1 = Dense(300, activation='relu')
         self.dense2 = Dense(600, activation='relu')
-        self.action = Dense(self.action_size, activation='tanh')
+        self.steering = Dense(1, activation='tanh')
+        self.throttle = Dense(1, activation='sigmoid')
 
     def call(self, x):
         x = self.dense1(x)
         x = self.dense2(x)
-        action = self.action(x)
+        steering = self.steering(x)
+        throttle = self.throttle(x)
+        action = concatenate([steering, throttle], axis=-1)
 
         return action
 
@@ -61,7 +64,7 @@ class DDPGagent(object):
     def __init__(self, env):
         self.gamma = 0.99
         self.batch_size = 64
-        self.buffer_size = 10000
+        self.buffer_size = 100000
         self.actor_learning_rate = 0.0001
         self.critic_learning_rate = 0.001
         self.tau = 0.001
@@ -185,7 +188,7 @@ class DDPGagent(object):
                 next_state, reward, done, _ = self.env.step(action)
                 self.buffer.add_buffer(state, action, reward, next_state, done)
 
-                if self.buffer.buffer_count() > 500:
+                if self.buffer.buffer_count() >= 5000:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
                     target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
                                                     self.target_actor(
