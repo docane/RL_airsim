@@ -130,7 +130,6 @@ class DDPGagent(object):
             q = self.critic([states, actions], training=True)
             critic_loss = tf.reduce_mean(tf.square(q - td_targets))
         critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
-        # critic_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in critic_grads]
         self.critic_opt.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
         return critic_loss
 
@@ -141,7 +140,6 @@ class DDPGagent(object):
             critic_q = self.critic([states, actions])
             actor_loss = -tf.reduce_mean(critic_q)
         actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
-        # actor_grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in actor_grads]
         self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
         return actor_loss
 
@@ -164,10 +162,13 @@ class DDPGagent(object):
         action = action.numpy()[0]
         return action
 
-    def draw_tensorboard(self, episode, score, avg_step, actor_loss, critic_loss):
+    def draw_tensorboard(self, episode, score, avg_step, mean_distance_per_step,
+                         mean_distance_to_road_center, actor_loss, critic_loss):
         with self.writer.as_default():
             tf.summary.scalar('Total Reward/Episode', score, step=episode)
             tf.summary.scalar('Average Step/Episode', avg_step, step=episode)
+            tf.summary.scalar('Mean Moving Distance Per Step/Episode', mean_distance_per_step, step=episode)
+            tf.summary.scalar('Mean Distance to Road Center/Episode', mean_distance_to_road_center, step=episode)
             tf.summary.scalar('Actor Loss/Episode', actor_loss, step=episode)
             tf.summary.scalar('Critic Loss/Episode', critic_loss, step=episode)
 
@@ -176,16 +177,18 @@ class DDPGagent(object):
         self.writer = tf.summary.create_file_writer(f'summary/airsim_ddpg_{self.now}')
         total_time = 0
         avg_step = 0
+        eval_index = [0, 105, 390]
         for ep in range(int(max_episode_max)):
             pre_noise = np.zeros(self.action_dim)
             step, episode_reward, done = 0, 0, False
-            actor_losses, critic_losses = np.array([]), np.array([])
+            actor_losses, critic_losses = [], []
+            moving_distances, distances_to_road_center = [], []
             state = self.env.reset()
             while not done:
                 action = self.get_action(state)
                 noise = self.ou_noise(pre_noise, dim=self.action_dim)
                 action = np.clip(action + noise, self.action_bound_low, self.action_bound_high)
-                next_state, reward, done, _ = self.env.step(action)
+                next_state, reward, done, info = self.env.step(action)
                 self.buffer.add_buffer(state, action, reward, next_state, done)
 
                 if self.buffer.buffer_count() >= 5000:
@@ -199,18 +202,28 @@ class DDPGagent(object):
                     actor_loss = self.actor_learn(states)
 
                     self.update_target_network(self.tau)
-                    critic_losses = np.append(critic_losses, critic_loss)
-                    actor_losses = np.append(actor_losses, actor_loss)
+                    critic_losses.append(critic_loss)
+                    actor_losses.append(actor_loss)
 
                 pre_noise = noise
                 state = next_state
                 episode_reward += reward
                 step += 1
+                moving_distances.append(np.linalg.norm(info['position'][:2] - info['preposition'][:2]))
+                distances_to_road_center.append(info['track_distance'][0])
 
             total_time += step
             avg_step = 0.9 * avg_step + 0.1 * step if avg_step != 0 else step
+
+            moving_distances = np.array(moving_distances) * 2000
+            distances_to_road_center = np.array(distances_to_road_center) * 2000
+            critic_losses = np.array(critic_losses)
+            actor_losses = np.array(actor_losses)
+
             avg_critic_loss = np.round(critic_losses.mean(), 5) if critic_losses.size != 0 else 0
             avg_actor_loss = np.round(actor_losses.mean(), 5) if actor_losses.size != 0 else 0
+            mean_distance_per_step = np.mean(moving_distances)
+            mean_distance_to_road_center = np.mean(distances_to_road_center)
 
             log = f'Episode: {ep + 1}'
             log += f' Step: {step}'
@@ -221,8 +234,30 @@ class DDPGagent(object):
             log += f' Critic Loss: {avg_critic_loss}'
             print(log)
 
-            self.draw_tensorboard(ep, episode_reward, avg_step, avg_actor_loss, avg_critic_loss)
+            self.draw_tensorboard(ep, episode_reward, avg_step, mean_distance_per_step,
+                                  mean_distance_to_road_center, avg_actor_loss, avg_critic_loss)
             self.save_weights(self.save_model_dir)
 
-            # if avg_step > 150:
-            #     break
+            # 100 스텝마다 에이전트 평가 진행
+            if ep % 100 == 99:
+                evaluation_rewards = []
+                eval_step = 0
+                for i in eval_index:
+                    state = self.env.reset(i)
+                    episode_reward = 0
+                    done = False
+                    while not done:
+                        action = self.get_action(state)
+                        next_state, reward, done, info = self.env.step(action)
+                        episode_reward += reward
+                        state = next_state
+                    eval_step += 1
+                    evaluation_rewards.append(episode_reward)
+                evaluation_rewards = np.array(evaluation_rewards)
+                mean_evaluation_reward = np.mean(evaluation_rewards)
+                log = f'Eval Step: {eval_step}'
+                log += f' Mean Eval Step: {eval_step / len(eval_index)}'
+                log += f' Mean Eval Reward: {mean_evaluation_reward}'
+                print(log)
+                with self.writer.as_default():
+                    tf.summary.scalar('Evaluation Reward', mean_evaluation_reward, step=ep // 100)

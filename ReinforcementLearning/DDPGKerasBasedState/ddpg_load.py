@@ -1,21 +1,19 @@
-import gym
 from ddpg_learn import DDPGagent
+from car_env import AirSimCarEnv
 import tensorflow as tf
-
-gym.envs.register(id='car_env-v0', entry_point='car_env:AirSimCarEnv')
 
 
 def main():
-    env = gym.make('car_env-v0', ip_address='127.0.0.1')
+    env = AirSimCarEnv()
     agent = DDPGagent(env)
-    agent.load_weights('./models/airsim_ddpg_model_2023_09_07_20_01_58/')
-    state = env.reset()
+    agent.load_weights('./models/airsim_ddpg_model_2023_09_24_03_00_11/')
+    state = env.reset(0)
     while True:
         action = agent.actor(tf.convert_to_tensor([state], dtype=tf.float32)).numpy()[0]
         next_state, reward, done, _ = env.step(action)
         state = next_state
         if done:
-            state = env.reset()
+            state = env.reset(0)
 
 
 if __name__ == '__main__':
