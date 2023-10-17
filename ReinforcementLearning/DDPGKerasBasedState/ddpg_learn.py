@@ -92,8 +92,8 @@ class DDPGagent(object):
         self.actor_opt = Adam(self.actor_learning_rate)
         self.critic_opt = Adam(self.critic_learning_rate)
 
-        self.actor.summary()
-        self.critic.summary()
+        # self.actor.summary()
+        # self.critic.summary()
 
         self.buffer = ReplayBuffer(self.buffer_size)
 
@@ -143,10 +143,6 @@ class DDPGagent(object):
         self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
         return actor_loss
 
-    @staticmethod
-    def ou_noise(x, rho=0.15, mu=0, dt=1e-1, sigma=0.2, dim=1):
-        return x + rho * (mu - x) * dt + sigma * np.sqrt(dt) * np.random.normal(size=dim)
-
     def load_weights(self, path):
         self.actor.load_weights(path + 'airsim_ddpg_actor.h5')
         self.critic.load_weights(path + 'airsim_ddpg_critic.h5')
@@ -171,6 +167,40 @@ class DDPGagent(object):
             tf.summary.scalar('Mean Distance to Road Center/Episode', mean_distance_to_road_center, step=episode)
             tf.summary.scalar('Actor Loss/Episode', actor_loss, step=episode)
             tf.summary.scalar('Critic Loss/Episode', critic_loss, step=episode)
+
+    def evaluation(self, episode, eval_index):
+        eval_step = 0
+        evaluation_rewards = []
+        distances_to_road_center = []
+        for i in eval_index:
+            episode_reward = 0
+            done = False
+            state = self.env.reset(i)
+            while not done:
+                action = self.get_action(state)
+                next_state, reward, done, info = self.env.step(action)
+                episode_reward += reward
+                state = next_state
+                distances_to_road_center.append(info['track_distance'][0])
+                eval_step += 1
+            evaluation_rewards.append(episode_reward)
+        evaluation_rewards = np.array(evaluation_rewards)
+        distances_to_road_center = np.array(distances_to_road_center)
+
+        mean_evaluation_reward = np.mean(evaluation_rewards)
+        mean_distance_to_road_center = np.mean(distances_to_road_center)
+
+        log = f'Eval Step: {eval_step}'
+        log += f' Mean Eval Step: {eval_step / len(eval_index)}'
+        log += f' Mean Eval Reward: {mean_evaluation_reward}'
+        log += f' Mean Eval Track Distance: {mean_distance_to_road_center}'
+        print(log)
+
+        with self.writer.as_default():
+            tf.summary.scalar('Evaluation Reward', mean_evaluation_reward, step=episode // 100)
+            tf.summary.scalar('Evaluation Mean Distance to Road Center',
+                              mean_distance_to_road_center,
+                              step=episode // 100)
 
     def train(self, max_episode_max):
         self.update_target_network(1.0)
@@ -207,6 +237,7 @@ class DDPGagent(object):
 
                 pre_noise = noise
                 state = next_state
+
                 episode_reward += reward
                 step += 1
                 moving_distances.append(np.linalg.norm(info['position'][:2] - info['preposition'][:2]))
@@ -215,13 +246,13 @@ class DDPGagent(object):
             total_time += step
             avg_step = 0.9 * avg_step + 0.1 * step if avg_step != 0 else step
 
-            moving_distances = np.array(moving_distances) * 2000
-            distances_to_road_center = np.array(distances_to_road_center) * 2000
+            moving_distances = np.array(moving_distances)
+            distances_to_road_center = np.array(distances_to_road_center)
             critic_losses = np.array(critic_losses)
             actor_losses = np.array(actor_losses)
 
-            avg_critic_loss = np.round(critic_losses.mean(), 5) if critic_losses.size != 0 else 0
-            avg_actor_loss = np.round(actor_losses.mean(), 5) if actor_losses.size != 0 else 0
+            mean_critic_loss = np.round(critic_losses.mean(), 5) if critic_losses.size != 0 else 0
+            mean_actor_loss = np.round(actor_losses.mean(), 5) if actor_losses.size != 0 else 0
             mean_distance_per_step = np.mean(moving_distances)
             mean_distance_to_road_center = np.mean(distances_to_road_center)
 
@@ -230,34 +261,18 @@ class DDPGagent(object):
             log += f' Total Time: {total_time}'
             log += f' Avg Step: {round(avg_step, 2)}'
             log += f' Reward: {round(episode_reward, 2)}'
-            log += f' Actor Loss: {avg_actor_loss}'
-            log += f' Critic Loss: {avg_critic_loss}'
+            log += f' Actor Loss: {mean_actor_loss}'
+            log += f' Critic Loss: {mean_critic_loss}'
             print(log)
 
             self.draw_tensorboard(ep, episode_reward, avg_step, mean_distance_per_step,
-                                  mean_distance_to_road_center, avg_actor_loss, avg_critic_loss)
+                                  mean_distance_to_road_center, mean_actor_loss, mean_critic_loss)
             self.save_weights(self.save_model_dir)
 
             # 100 스텝마다 에이전트 평가 진행
             if ep % 100 == 99:
-                evaluation_rewards = []
-                eval_step = 0
-                for i in eval_index:
-                    state = self.env.reset(i)
-                    episode_reward = 0
-                    done = False
-                    while not done:
-                        action = self.get_action(state)
-                        next_state, reward, done, info = self.env.step(action)
-                        episode_reward += reward
-                        state = next_state
-                    eval_step += 1
-                    evaluation_rewards.append(episode_reward)
-                evaluation_rewards = np.array(evaluation_rewards)
-                mean_evaluation_reward = np.mean(evaluation_rewards)
-                log = f'Eval Step: {eval_step}'
-                log += f' Mean Eval Step: {eval_step / len(eval_index)}'
-                log += f' Mean Eval Reward: {mean_evaluation_reward}'
-                print(log)
-                with self.writer.as_default():
-                    tf.summary.scalar('Evaluation Reward', mean_evaluation_reward, step=ep // 100)
+                self.evaluation(ep, eval_index)
+
+    @staticmethod
+    def ou_noise(x, rho=0.15, mu=0, dt=1e-1, sigma=0.2, dim=1):
+        return x + rho * (mu - x) * dt + sigma * np.sqrt(dt) * np.random.normal(size=dim)
