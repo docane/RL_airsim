@@ -168,7 +168,8 @@ class DDPGagent(object):
             tf.summary.scalar('Actor Loss/Episode', actor_loss, step=episode)
             tf.summary.scalar('Critic Loss/Episode', critic_loss, step=episode)
 
-    def evaluation(self, episode, eval_index):
+    def evaluation(self, episode):
+        eval_index = [0, 105, 390]
         eval_step = 0
         evaluation_rewards = []
         distances_to_road_center = []
@@ -207,7 +208,7 @@ class DDPGagent(object):
         self.writer = tf.summary.create_file_writer(f'summary/airsim_ddpg_{self.now}')
         total_time = 0
         avg_step = 0
-        eval_index = [0, 105, 390]
+
         for ep in range(int(max_episode_max)):
             pre_noise = np.zeros(self.action_dim)
             step, episode_reward, done = 0, 0, False
@@ -221,7 +222,7 @@ class DDPGagent(object):
                 next_state, reward, done, info = self.env.step(action)
                 self.buffer.add_buffer(state, action, reward, next_state, done)
 
-                if self.buffer.buffer_count() >= 5000:
+                if self.buffer.buffer_count() >= 10000:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
                     target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
                                                     self.target_actor(
@@ -271,7 +272,7 @@ class DDPGagent(object):
 
             # 100 스텝마다 에이전트 평가 진행
             if ep % 100 == 99:
-                self.evaluation(ep, eval_index)
+                self.evaluation(ep)
 
     @staticmethod
     def ou_noise(x, rho=0.15, mu=0, dt=1e-1, sigma=0.2, dim=1):
