@@ -9,9 +9,15 @@ Airsim 시뮬레이션 환경을 사용하여 자율주행 차량을 개발하�
 강화학습 환경 구현: Gym 0.25.2<br>
 
 ## 사용법
+- 상태변수로 State를 사용할 경우
 1. Airsim 시뮬레이션을 실행합니다.<br>
 2. ReinforcementLearning\DDPGkerasBasedState\ddpg_main.py을 실행하여 강화학습을 진행합니다. 학습 상황은 TensorBoard를 통해 확인할 수 있습니다.<br>
-3. ReinforcementLearning\DDPGkerasBasedState\ddpg_load.py을 실행하여 학습된 모델을 불러와 테스트합니다.
+3. ReinforcementLearning\DDPGkerasBasedState\ddpg_load.py을 실행하여 학습된 모델을 불러와 테스트합니다.<br>
+- 상태변수로 State, Image를 사용할 경우
+1. Airsim 시뮬레이션을 실행합니다.<br>
+2. ReinforcementLearning\DDPGkerasBasedImage\ddpg_main.py을 실행하여 강화학습을 진행합니다. 학습 상황은 TensorBoard를 통해 확인할 수 있습니다.<br>
+3. ReinforcementLearning\DDPGkerasBasedImage\ddpg_load.py을 실행하여 학습된 모델을 불러와 테스트합니다.<br>
+
 
 ## 데모
 ![Demo](docs/demo.gif)
