@@ -29,7 +29,7 @@ class AirSimEnv(gym.Env):
     def step(self, action):
         raise NotImplementedError()
 
-    def render(self):
+    def render(self, mode='rgb_array'):
         return self._get_obs()
 
 
@@ -42,15 +42,10 @@ class AirSimCarEnv(AirSimEnv):
         self.car_state = None
 
         self.state = {
-            'preposition': np.zeros(3),
             'position': np.zeros(3),
             'pose': np.zeros(3),
-            'prepose': np.zeros(3),
             'linear_velocity': np.zeros(3),
             'angular_velocity': np.zeros(3),
-            'prev_target_point': np.zeros(2),
-            'target_point': np.zeros(2),
-            'prev_target_linear_velocity_ratio': np.zeros(2),
             'target_linear_velocity_ratio': np.zeros(2),
             'angle': np.zeros(1),
             'track_distance': np.zeros(1)
@@ -83,7 +78,7 @@ class AirSimCarEnv(AirSimEnv):
             dtype=np.float32)
 
         self.state_space = spaces.Box(low, high, shape=(10,), dtype=np.float32)
-        self.image_space = spaces.Box(low=0, high=1, shape=(84, 84, 3), dtype=np.float32)
+        self.image_space = spaces.Box(low=0, high=1, shape=(28, 28, 1), dtype=np.float32)
         self.observation_space = gym.spaces.Dict({'state': self.state_space,
                                                   'image': self.image_space})
 
@@ -112,6 +107,7 @@ class AirSimCarEnv(AirSimEnv):
         self.route_points_5m = self._capture_route_points_5m()
 
         self.client.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.xyz_points],
+                                     thickness=20,
                                      is_persistent=True)
         self._success = False
 
@@ -145,8 +141,6 @@ class AirSimCarEnv(AirSimEnv):
         self.car_state = self.client.getCarState()
         kin_est = self.car_state.kinematics_estimated
 
-        self.state['preposition'] = self.state['position']
-        self.state['prepose'] = self.state['pose']
         self.state['position'] = kin_est.position.to_numpy_array()
         self.state['pose'] = np.array(airsim.to_eularian_angles(kin_est.orientation))
         self.state['linear_velocity'] = kin_est.linear_velocity.to_numpy_array()
@@ -173,13 +167,6 @@ class AirSimCarEnv(AirSimEnv):
         target_linear_velocity_norm = np.linalg.norm(target_linear_velocity)
         target_linear_velocity_ratio = target_linear_velocity / target_linear_velocity_norm
 
-        self.state['prev_target_point'][0] = self.state['target_point'][0]
-        self.state['prev_target_point'][1] = self.state['target_point'][1]
-        self.state['target_point'][0] = target_point[0]
-        self.state['target_point'][1] = target_point[1]
-
-        self.state['prev_target_linear_velocity_ratio'][0] = self.state['target_linear_velocity_ratio'][0]
-        self.state['prev_target_linear_velocity_ratio'][1] = self.state['target_linear_velocity_ratio'][1]
         self.state['target_linear_velocity_ratio'][0] = target_linear_velocity_ratio[0]
         self.state['target_linear_velocity_ratio'][1] = target_linear_velocity_ratio[1]
 
@@ -245,12 +232,6 @@ class AirSimCarEnv(AirSimEnv):
         vxtrackpos = trackpos * car_vel_norm
 
         reward = vxcostheta - vxsintheta - trackpos - vxtrackpos / 10
-        log = f'vxcostheta: {vxcostheta}\n'
-        log += f'vxsintheta: {vxsintheta}\n'
-        log += f'trackpos: {trackpos}\n'
-        log += f'vxtrackpos: {vxtrackpos}'
-        print(log)
-        print('Reward:', reward)
 
         done = self._check_done()
         if self.state['collision']:
@@ -316,6 +297,15 @@ class AirSimCarEnv(AirSimEnv):
                 route_points_5m.append(i)
         return np.array(route_points_5m)
 
+    def transform_obs(self, response):
+        image1d = np.frombuffer(response.image_data_uint8, dtype=np.uint8)
+        image = np.reshape(image1d, (response.height, response.width, 3))
+        red_pixel = self.filter_red_color(image)
+        red_pixel = self.limit_region(red_pixel)
+        image = np.expand_dims(cv2.resize(red_pixel, (28, 28), cv2.INTER_AREA), axis=-1)
+        image = image / 255
+        return image
+
     @staticmethod
     def gaussian(x, mean=0.0, sigma=1.0):
         return (1 / np.sqrt(2 * np.pi * sigma ** 2)) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))
@@ -334,9 +324,16 @@ class AirSimCarEnv(AirSimEnv):
         return curvature
 
     @staticmethod
-    def transform_obs(response):
-        image1d = np.frombuffer(response.image_data_uint8, dtype=np.uint8)
-        image1d = image1d / 255
-        image2d = np.reshape(image1d, (response.height, response.width, 3))
-        image = np.array(cv2.resize(image2d, (84, 84), cv2.INTER_AREA), dtype=np.float32)
+    def filter_red_color(image):
+        image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        red_line_1 = cv2.inRange(image_hsv, (0, 150, 200), (20, 255, 255))
+        red_line_2 = cv2.inRange(image_hsv, (160, 150, 200), (179, 255, 255))
+        red_line = red_line_1 + red_line_2
+        return red_line
+
+    @staticmethod
+    def limit_region(image):
+        height, _ = image.shape
+        new_height = int(height * 0.4)
+        image = image[new_height:, :]
         return image

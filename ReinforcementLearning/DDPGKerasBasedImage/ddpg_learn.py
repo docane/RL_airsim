@@ -1,9 +1,7 @@
 import datetime as dt
-
-import keras.layers
 import numpy as np
 from keras.models import Model
-from keras.layers import Input, Dense, concatenate, Conv2D, BatchNormalization, Activation, Flatten, Concatenate
+from keras.layers import Layer, Input, Dense, concatenate, Conv2D, Flatten, MaxPool2D
 from keras.optimizers import Adam
 import tensorflow as tf
 from replaybuffer import ReplayBuffer
@@ -19,18 +17,15 @@ if gpus:
         print(e)
 
 
-class FeatureExtractor(keras.layers.Layer):
+class FeatureExtractor(Layer):
     def __init__(self):
         super(FeatureExtractor, self).__init__()
 
-        self.conv2d1 = Conv2D(32, (1, 1), activation='relu')
-        self.conv2d2 = Conv2D(32, (3, 3), activation='relu')
-        self.conv2d3 = Conv2D(64, (1, 1))
-        self.bn1 = BatchNormalization()
-
-        self.conv2d4 = Conv2D(32, (3, 3), activation='relu')
-        self.conv2d5 = Conv2D(64, (1, 1))
-        self.bn2 = BatchNormalization()
+        self.conv2d1 = Conv2D(32, (3, 3), activation='relu')
+        self.maxpool2d1 = MaxPool2D((2, 2))
+        self.conv2d2 = Conv2D(64, (3, 3), activation='relu')
+        self.maxpool2d2 = MaxPool2D((2, 2))
+        self.conv2d3 = Conv2D(128, (3, 3), activation='relu')
 
         self.flatten = Flatten()
 
@@ -38,15 +33,10 @@ class FeatureExtractor(keras.layers.Layer):
 
     def call(self, image):
         x = self.conv2d1(image)
+        x = self.maxpool2d1(x)
         x = self.conv2d2(x)
+        x = self.maxpool2d2(x)
         x = self.conv2d3(x)
-        x = self.bn1(x)
-        x = Activation('relu')(x)
-
-        x = self.conv2d4(x)
-        x = self.conv2d5(x)
-        x = self.bn2(x)
-        x = Activation('relu')(x)
 
         x = self.flatten(x)
         x = self.dense1(x)
@@ -60,8 +50,8 @@ class Actor(Model):
 
         self.feature_extractor = FeatureExtractor()
 
-        self.dense1 = Dense(300, activation='relu')
-        self.dense2 = Dense(600, activation='relu')
+        self.dense1 = Dense(150, activation='relu')
+        self.dense2 = Dense(300, activation='relu')
         self.steering = Dense(1, activation='tanh')
         self.throttle = Dense(1, activation='sigmoid')
 
@@ -86,10 +76,10 @@ class Critic(Model):
 
         self.feature_extractor = FeatureExtractor()
 
-        self.x1 = Dense(300, activation='relu')
-        self.x2 = Dense(600, activation='relu')
-        self.a1 = Dense(600, activation='relu')
-        self.h1 = Dense(600, activation='relu')
+        self.x1 = Dense(150, activation='relu')
+        self.x2 = Dense(300, activation='relu')
+        self.a1 = Dense(300, activation='relu')
+        self.h1 = Dense(300, activation='relu')
         self.q = Dense(1, activation='linear')
 
     def call(self, state_action_image):
@@ -279,7 +269,7 @@ class DDPGagent(object):
                 next_state, reward, done, info = self.env.step(action)
                 self.buffer.add_buffer(state, action, reward, next_state, done)
 
-                if self.buffer.buffer_count() >= 2:
+                if self.buffer.buffer_count() >= 10000:
                     states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
                     target_qs = self.target_critic(
                         [tf.convert_to_tensor(np.array([subarray['state'] for subarray in next_states]),
@@ -334,7 +324,7 @@ class DDPGagent(object):
                                   mean_distance_to_road_center, mean_actor_loss, mean_critic_loss)
             self.save_weights(self.save_model_dir)
 
-            # 100 스텝마다 에이전트 평가 진행
+            # 100 에피소드마다 에이전트 평가 진행
             if ep % 100 == 99:
                 self.evaluation(ep)
 
