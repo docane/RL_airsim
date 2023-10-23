@@ -107,7 +107,7 @@ class AirSimCarEnv(AirSimEnv):
         self.route_points_5m = self._capture_route_points_5m()
 
         self.client.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.xyz_points],
-                                     thickness=20,
+                                     thickness=30,
                                      is_persistent=True)
         self._success = False
 
@@ -135,8 +135,10 @@ class AirSimCarEnv(AirSimEnv):
         self.client.setCarControls(self.car_controls)
 
     def _get_obs(self):
-        response = self.client.simGetImages([self.image_request])
-        image = self.transform_obs(response[0])
+        response = self.client.simGetImages([self.image_request])[0]
+        while len(response.image_data_uint8) == 0:
+            response = self.client.simGetImages([self.image_request])[0]
+        image = self.transform_obs(response)
 
         self.car_state = self.client.getCarState()
         kin_est = self.car_state.kinematics_estimated
