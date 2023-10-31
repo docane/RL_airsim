@@ -28,7 +28,7 @@ class AirSimEnv(gym.Env):
     def step(self, action):
         raise NotImplementedError()
 
-    def render(self):
+    def render(self, mode='rgb_array'):
         return self._get_obs()
 
 
@@ -41,74 +41,42 @@ class AirSimCarEnv(AirSimEnv):
         self.car_state = None
 
         self.state = {
-            'preposition': np.zeros(3),
             'position': np.zeros(3),
+            'preposition': np.zeros(3),
+            'linear_velocity': np.zeros(3),
             'pose': np.zeros(3),
             'prepose': np.zeros(3),
-            'linear_velocity': np.zeros(3),
             'angular_velocity': np.zeros(3),
-            'prev_target_point': np.zeros(2),
-            'target_point': np.zeros(2),
-            'prev_target_linear_velocity_ratio': np.zeros(2),
-            'target_linear_velocity_ratio': np.zeros(2),
             'angle': np.zeros(1),
             'track_distance': np.zeros(1)
         }
 
-        low = np.array(
-            [np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min,
-             np.finfo(np.float32).min],
-            dtype=np.float32)
-
-        high = np.array(
-            [np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max,
-             np.finfo(np.float32).max],
-            dtype=np.float32)
-
-        self.observation_space = spaces.Box(low, high, shape=(10,), dtype=np.float32)
+        low = np.array([np.finfo(np.float32).min for _ in range(21)], dtype=np.float32)
+        high = np.array([np.finfo(np.float32).max for _ in range(21)], dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(21,), dtype=np.float32)
 
         action_low = np.array([-1, 0], dtype=np.float32)
         action_high = np.array([1, 1], dtype=np.float32)
         self.action_space = spaces.Box(low=action_low, high=action_high, shape=(2,), dtype=np.float32)
 
-        self.trajectory = pd.read_csv('data/airsim_rec_6.txt', sep='\t')
+        self.trajectory = pd.read_csv('data/airsim_rec.txt', sep='\t')
 
         pos_x = self.trajectory['POS_X'].values.astype(np.float32)
         pos_y = self.trajectory['POS_Y'].values.astype(np.float32)
         pos_z = self.trajectory['POS_Z'].values.astype(np.float32)
         self.max_pos = 1000.0
         self.min_pos = -1000.0
-        normalized_x = self.min_max_scaler(pos_x, self.min_pos, self.max_pos, -1, 1)
-        normalized_y = self.min_max_scaler(pos_y, self.min_pos, self.max_pos, -1, 1)
-        normalized_x = normalized_x.reshape((-1, 1))
-        normalized_y = normalized_y.reshape((-1, 1))
 
         self.velocity_divide = 2000.0
 
         self.xy_points = np.column_stack((pos_x, pos_y))
-        self.normalized_xy_points = np.column_stack((normalized_x, normalized_y))
         self.xyz_points = np.column_stack((pos_x.astype(float),
                                            pos_y.astype(float),
                                            pos_z.astype(float)))
 
         # 5m 단위로 경로 포인트 잡기
         self.route_points_5m = self._capture_route_points_5m()
+        self.curvature = self.compute_curvature(pos_x, pos_y)
 
         self.client.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.xyz_points],
                                      is_persistent=True)
@@ -162,22 +130,9 @@ class AirSimCarEnv(AirSimEnv):
                 break
 
         # 앞, 뒤에서 가장 가까운 경로 포인트 잡기
-        self.route_point = [index for index in range(min_dist_5m_index, min_dist_5m_index + 2)]
+        self.route_point = [index for index in range(min_dist_5m_index, min_dist_5m_index + 6)]
 
-        target_point = self.xy_points[self.route_points_5m[self.route_point[1]]]
-        target_linear_velocity = target_point - car_point
-        target_linear_velocity_norm = np.linalg.norm(target_linear_velocity)
-        target_linear_velocity_ratio = target_linear_velocity / target_linear_velocity_norm
-
-        self.state['prev_target_point'][0] = self.state['target_point'][0]
-        self.state['prev_target_point'][1] = self.state['target_point'][1]
-        self.state['target_point'][0] = target_point[0]
-        self.state['target_point'][1] = target_point[1]
-
-        self.state['prev_target_linear_velocity_ratio'][0] = self.state['target_linear_velocity_ratio'][0]
-        self.state['prev_target_linear_velocity_ratio'][1] = self.state['target_linear_velocity_ratio'][1]
-        self.state['target_linear_velocity_ratio'][0] = target_linear_velocity_ratio[0]
-        self.state['target_linear_velocity_ratio'][1] = target_linear_velocity_ratio[1]
+        target_points = self.xy_points[self.route_points_5m[self.route_point[1:]]]
 
         first_target_point = self.xy_points[self.route_points_5m[self.route_point[0]]]
         second_target_point = self.xy_points[self.route_points_5m[self.route_point[1]]]
@@ -198,19 +153,33 @@ class AirSimCarEnv(AirSimEnv):
         self.state['track_distance'][0] = min_dist
 
         normalized_position = self.min_max_scaler(self.state['position'][:2], self.min_pos, self.max_pos, -1, 1)
-        normalized_pose = self.state['pose'][0] / np.pi
+        normalized_preposition = self.min_max_scaler(self.state['preposition'][:2], self.min_pos, self.max_pos, -1, 1)
         normalized_linear_velocity = self.min_max_scaler(self.state['linear_velocity'], -30, 30, -1, 1)
+        normalized_pose = self.state['pose'][0] / np.pi
+        normalized_prepose = self.state['prepose'][0] / np.pi
         normalized_angular_velocity = self.state['angular_velocity'][2] / np.pi
         normalized_angle = self.state['angle'][0] / np.pi
+        normalized_target_points = self.min_max_scaler(target_points, self.min_pos, self.max_pos, -1, 1)
 
         obs = [normalized_position[0],
                normalized_position[1],
-               normalized_pose,
+               normalized_preposition[0],
+               normalized_preposition[1],
                normalized_linear_velocity[0],
                normalized_linear_velocity[1],
+               normalized_pose,
+               normalized_prepose,
                normalized_angular_velocity,
-               target_linear_velocity_ratio[0],
-               target_linear_velocity_ratio[1],
+               normalized_target_points[0][0],
+               normalized_target_points[0][1],
+               normalized_target_points[1][0],
+               normalized_target_points[1][1],
+               normalized_target_points[2][0],
+               normalized_target_points[2][1],
+               normalized_target_points[3][0],
+               normalized_target_points[3][1],
+               normalized_target_points[4][0],
+               normalized_target_points[4][1],
                normalized_angle,
                min_dist]
 
@@ -240,12 +209,6 @@ class AirSimCarEnv(AirSimEnv):
         vxtrackpos = trackpos * car_vel_norm
 
         reward = vxcostheta - vxsintheta - trackpos - vxtrackpos / 10
-        log = f'vxcostheta: {vxcostheta}\n'
-        log += f'vxsintheta: {vxsintheta}\n'
-        log += f'trackpos: {trackpos}\n'
-        log += f'vxtrackpos: {vxtrackpos}'
-        print(log)
-        print('Reward:', reward)
 
         done = self._check_done()
         if self.state['collision']:
