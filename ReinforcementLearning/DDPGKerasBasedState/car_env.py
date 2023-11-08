@@ -5,6 +5,7 @@ import time
 import airsim
 import pandas as pd
 from airsim import Vector3r
+from tensorflow_probability.python.distributions.normal import Normal
 
 
 class AirSimEnv(gym.Env):
@@ -193,21 +194,23 @@ class AirSimCarEnv(AirSimEnv):
         second_target_point = self.xy_points[self.route_points_5m[self.route_point[1]]]
         track_vector = second_target_point - first_target_point
         track_vector_norm = np.linalg.norm(track_vector)
+        target_dir_vec = track_vector / track_vector_norm
 
-        dot_product = np.dot(track_vector, car_vel)
-        angle_radian = np.arccos(
-            np.clip(dot_product / (track_vector_norm * car_vel_norm), -1, 1)) if car_vel_norm != 0 else -1
-        if angle_radian != -1:
-            vxcostheta = car_vel_norm * np.cos(angle_radian)
-            vxsintheta = car_vel_norm * np.sin(angle_radian)
-        else:
-            vxcostheta = 0
-            vxsintheta = 0
+        car_dir_vec = car_vel / car_vel_norm if car_vel_norm != 0 else car_vel * 0
+        ip = np.clip(car_dir_vec[0] * target_dir_vec[1] - car_dir_vec[1] * target_dir_vec[0], -1, 1)
+        theta = np.arcsin(ip)
 
-        trackpos = min(np.linalg.norm(self.xy_points - car_pt, axis=1))
-        vxtrackpos = trackpos * car_vel_norm
+        dist = np.linalg.norm(self.xy_points - car_point, axis=1)
+        min_dist = np.min(dist)
 
-        reward = vxcostheta - vxsintheta - trackpos - vxtrackpos / 10
+        angle_normal_distribution = Normal(0, 1)
+        steering_reward = angle_normal_distribution.prob(theta).numpy()
+        speed_normal_distribution = Normal(10, 1)
+        throttle_reward = speed_normal_distribution.prob(car_vel_norm).numpy()
+        distance_normal_distribution = Normal(0, 1)
+        distance_reward = distance_normal_distribution.prob(min_dist).numpy()
+
+        reward = steering_reward + throttle_reward + distance_reward
 
         done = self._check_done()
         if self.state['collision']:
