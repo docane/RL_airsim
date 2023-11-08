@@ -79,6 +79,7 @@ class AirSimCarEnv(AirSimEnv):
         self.client.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.xyz_points],
                                      is_persistent=True)
         self._success = False
+        self.timestep = 0
 
     def _setup_car(self, start_index: int = None):
         self.client.reset()
@@ -221,11 +222,13 @@ class AirSimCarEnv(AirSimEnv):
         self.client.simPause(True)
         obs = self._get_obs()
         reward, done = self._compute_reward()
+        self.timestep += 1
         return obs, reward, done, self.state
 
     def reset(self, start_index: int = None):
         self._setup_car(start_index)
         time.sleep(0.01)
+        self.timestep = 0
         return self._get_obs()
 
     def close(self):
@@ -256,6 +259,9 @@ class AirSimCarEnv(AirSimEnv):
 
         distances = np.linalg.norm(self.xy_points - car_point, axis=1)
         min_distance_index = distances.argmin()
+
+        if self.timestep >= 499:
+            return True
 
         if min_distance_index > 2500:
             self._success = True
