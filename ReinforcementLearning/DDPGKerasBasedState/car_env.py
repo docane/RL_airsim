@@ -67,8 +67,6 @@ class AirSimCarEnv(AirSimEnv):
         self.max_pos = 1000.0
         self.min_pos = -1000.0
 
-        self.velocity_divide = 2000.0
-
         self.xy_points = np.column_stack((pos_x, pos_y))
         self.xyz_points = np.column_stack((pos_x.astype(float),
                                            pos_y.astype(float),
@@ -186,7 +184,7 @@ class AirSimCarEnv(AirSimEnv):
         return np.array(obs)
 
     def _compute_reward(self):
-        car_pt = self.state['position'][:2]
+        car_point = self.state['position'][:2]
         car_vel = self.state['linear_velocity'][:2]
         car_vel_norm = np.linalg.norm(car_vel)
 
@@ -270,7 +268,7 @@ class AirSimCarEnv(AirSimEnv):
         route_points_5m = [0]
         for i in range(1, len(self.trajectory)):
             distance = np.linalg.norm(self.xy_points[i] - self.xy_points[route_points_5m[-1]])
-            if distance > (5 / 2000):
+            if distance > 5:
                 route_points_5m.append(i)
         return np.array(route_points_5m)
 
