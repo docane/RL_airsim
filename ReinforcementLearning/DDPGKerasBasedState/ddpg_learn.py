@@ -169,7 +169,7 @@ class DDPGagent(object):
             tf.summary.scalar('Critic Loss/Episode', critic_loss, step=episode)
 
     def evaluation(self, episode):
-        eval_index = [0, 105, 390]
+        eval_index = [0, 370, 770]
         eval_step = 0
         evaluation_rewards = []
         distances_to_road_center = []
