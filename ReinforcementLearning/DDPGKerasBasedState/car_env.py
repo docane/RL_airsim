@@ -59,7 +59,7 @@ class AirSimCarEnv(AirSimEnv):
         action_high = np.array([1, 1], dtype=np.float32)
         self.action_space = spaces.Box(low=action_low, high=action_high, shape=(2,), dtype=np.float32)
 
-        self.trajectory = pd.read_csv('data/airsim_rec.txt', sep='\t')
+        self.trajectory = pd.read_csv('./data/airsim_rec.txt', sep='\t')
 
         pos_x = self.trajectory['POS_X'].values.astype(np.float32)
         pos_y = self.trajectory['POS_Y'].values.astype(np.float32)
@@ -92,7 +92,7 @@ class AirSimCarEnv(AirSimEnv):
             if self._success:
                 start_index = 0
             else:
-                start_index = np.random.randint(0, len(self.trajectory) - 400)
+                start_index = np.random.randint(0, len(self.trajectory) - 1100)
         self._car_position_init(start_index)
 
     def __del__(self):
@@ -259,7 +259,7 @@ class AirSimCarEnv(AirSimEnv):
         distances = np.linalg.norm(self.xy_points - car_point, axis=1)
         min_distance_index = distances.argmin()
 
-        if min_distance_index > 770:
+        if min_distance_index > 2500:
             self._success = True
             return True
         else:
