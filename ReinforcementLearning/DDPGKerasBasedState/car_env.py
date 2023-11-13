@@ -267,7 +267,7 @@ class AirSimCarEnv(AirSimEnv):
         if self.timestep >= 499:
             return True
 
-        if min_distance_index > 2500:
+        if min_distance_index > 2100:
             self._success = True
             return True
         else:
