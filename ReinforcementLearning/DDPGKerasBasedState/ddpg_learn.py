@@ -27,13 +27,15 @@ class Actor(Model):
         self.dense2 = Dense(600, activation='relu')
         self.steering = Dense(1, activation='tanh')
         self.throttle = Dense(1, activation='sigmoid')
+        self.brake = Dense(1, activation='sigmoid')
 
     def call(self, x):
         x = self.dense1(x)
         x = self.dense2(x)
         steering = self.steering(x)
         throttle = self.throttle(x)
-        action = concatenate([steering, throttle], axis=-1)
+        brake = self.brake(x)
+        action = concatenate([steering, throttle, brake], axis=-1)
 
         return action
 

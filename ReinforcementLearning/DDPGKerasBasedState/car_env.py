@@ -56,9 +56,9 @@ class AirSimCarEnv(AirSimEnv):
         high = np.array([np.finfo(np.float32).max for _ in range(21)], dtype=np.float32)
         self.observation_space = spaces.Box(low, high, shape=(21,), dtype=np.float32)
 
-        action_low = np.array([-1, 0], dtype=np.float32)
-        action_high = np.array([1, 1], dtype=np.float32)
-        self.action_space = spaces.Box(low=action_low, high=action_high, shape=(2,), dtype=np.float32)
+        action_low = np.array([-1, 0, 0], dtype=np.float32)
+        action_high = np.array([1, 1, 1], dtype=np.float32)
+        self.action_space = spaces.Box(low=action_low, high=action_high, shape=(3,), dtype=np.float32)
 
         self.trajectory = pd.read_csv('./data/airsim_rec.txt', sep='\t')
 
@@ -99,7 +99,7 @@ class AirSimCarEnv(AirSimEnv):
         self.client.reset()
 
     def _do_action(self, actions):
-        self.car_controls.brake = 0
+        self.car_controls.brake = float(actions[2])
         self.car_controls.throttle = float(actions[1])
         self.car_controls.steering = float(actions[0])
 
