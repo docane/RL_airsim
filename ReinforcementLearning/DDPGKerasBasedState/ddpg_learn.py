@@ -148,12 +148,16 @@ class DDPGagent(object):
     def load_weights(self, path):
         self.actor.load_weights(path + 'airsim_ddpg_actor.h5')
         self.critic.load_weights(path + 'airsim_ddpg_critic.h5')
+        self.target_actor.load_weights(path + 'airsim_ddpg_target_actor.h5')
+        self.target_critic.load_weights(path + 'airsim_ddpg_target_critic.h5')
 
     def save_weights(self, path):
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
-        self.actor.save_weights(path + './airsim_ddpg_actor.h5')
-        self.critic.save_weights(path + './airsim_ddpg_critic.h5')
+        self.actor.save_weights(path + 'airsim_ddpg_actor.h5')
+        self.critic.save_weights(path + 'airsim_ddpg_critic.h5')
+        self.target_actor.save_weights(path + 'airsim_ddpg_target_actor.h5')
+        self.target_critic.save_weights(path + 'airsim_ddpg_target_critic.h5')
 
     def get_action(self, state):
         action = self.actor(tf.convert_to_tensor([state], dtype=tf.float32))
