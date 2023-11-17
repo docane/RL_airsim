@@ -51,9 +51,9 @@ class AirSimCarEnv(AirSimEnv):
             'track_distance': np.zeros(1)
         }
 
-        low = np.array([np.finfo(np.float32).min for _ in range(21)], dtype=np.float32)
-        high = np.array([np.finfo(np.float32).max for _ in range(21)], dtype=np.float32)
-        self.observation_space = spaces.Box(low, high, shape=(21,), dtype=np.float32)
+        low = np.array([np.finfo(np.float32).min for _ in range(13)], dtype=np.float32)
+        high = np.array([np.finfo(np.float32).max for _ in range(13)], dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(13,), dtype=np.float32)
 
         action_low = np.array([-1, 0, 0], dtype=np.float32)
         action_high = np.array([1, 1, 1], dtype=np.float32)
@@ -71,9 +71,6 @@ class AirSimCarEnv(AirSimEnv):
         self.xyz_points = np.column_stack((pos_x.astype(float),
                                            pos_y.astype(float),
                                            pos_z.astype(float)))
-
-        # 5m 단위로 경로 포인트 잡기
-        self.route_points_5m = self._capture_route_points_5m()
 
         self.client.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.xyz_points],
                                      is_persistent=True)
@@ -117,28 +114,22 @@ class AirSimCarEnv(AirSimEnv):
 
         car_point = self.state['position'][:2]
 
-        dist = np.linalg.norm(self.xy_points - car_point, axis=1)
-        min_dist_index = dist.argmin()
+        distances = np.linalg.norm(self.xy_points - car_point, axis=1)
+        min_distance_index = distances.argmin()
+        self.current_point = self.xy_points[min_distance_index]
 
-        # 5m 단위의 경로 포인트 중에서 가장 가까운 뒤에 있는 경로 포인트 구하기
-        min_dist_5m_index = 0
-        for i in range(len(self.route_points_5m)):
-            if min_dist_index < self.route_points_5m[i]:
-                min_dist_5m_index = i - 1
+        # 가장 가까운 포인트에서 1m 앞 포인트 찾기
+        self.target_point = self.xy_points[min_distance_index]
+        for i in range(min_distance_index, len(self.xy_points)):
+            distance = np.linalg.norm(self.xy_points[i] - self.xy_points[min_distance_index])
+            if distance > 1:
+                self.target_point = self.xy_points[i]
                 break
-
-        # 앞, 뒤에서 가장 가까운 경로 포인트 잡기
-        self.route_point = [index for index in range(min_dist_5m_index, min_dist_5m_index + 6)]
-
-        target_points = self.xy_points[self.route_points_5m[self.route_point[1:]]]
-
-        first_target_point = self.xy_points[self.route_points_5m[self.route_point[0]]]
-        second_target_point = self.xy_points[self.route_points_5m[self.route_point[1]]]
 
         car_vel = self.state['linear_velocity'][:2]
         car_vel_norm = np.linalg.norm(car_vel)
 
-        track_vector = second_target_point - first_target_point
+        track_vector = self.target_point - self.current_point
         track_vector_norm = np.linalg.norm(track_vector)
         target_dir_vec = track_vector / track_vector_norm
 
@@ -157,7 +148,7 @@ class AirSimCarEnv(AirSimEnv):
         normalized_prepose = self.state['prepose'][0] / np.pi
         normalized_angular_velocity = self.state['angular_velocity'][2] / np.pi
         normalized_angle = self.state['angle'][0] / np.pi
-        normalized_target_points = self.min_max_scaler(target_points, self.min_pos, self.max_pos, -1, 1)
+        normalized_target_point = self.min_max_scaler(self.target_point, self.min_pos, self.max_pos, -1, 1)
 
         obs = [normalized_position[0],
                normalized_position[1],
@@ -168,29 +159,18 @@ class AirSimCarEnv(AirSimEnv):
                normalized_pose,
                normalized_prepose,
                normalized_angular_velocity,
-               normalized_target_points[0][0],
-               normalized_target_points[0][1],
-               normalized_target_points[1][0],
-               normalized_target_points[1][1],
-               normalized_target_points[2][0],
-               normalized_target_points[2][1],
-               normalized_target_points[3][0],
-               normalized_target_points[3][1],
-               normalized_target_points[4][0],
-               normalized_target_points[4][1],
+               normalized_target_point[0],
+               normalized_target_point[1],
                normalized_angle,
                min_dist]
 
         return np.array(obs)
 
     def _compute_reward(self):
-        car_point = self.state['position'][:2]
         car_vel = self.state['linear_velocity'][:2]
         car_vel_norm = np.linalg.norm(car_vel)
 
-        first_target_point = self.xy_points[self.route_points_5m[self.route_point[0]]]
-        second_target_point = self.xy_points[self.route_points_5m[self.route_point[1]]]
-        track_vector = second_target_point - first_target_point
+        track_vector = self.target_point - self.current_point
         track_vector_norm = np.linalg.norm(track_vector)
 
         dot_product = np.dot(track_vector, car_vel)
@@ -271,14 +251,6 @@ class AirSimCarEnv(AirSimEnv):
         else:
             self._success = False
             return False
-
-    def _capture_route_points_5m(self):
-        route_points_5m = [0]
-        for i in range(1, len(self.trajectory)):
-            distance = np.linalg.norm(self.xy_points[i] - self.xy_points[route_points_5m[-1]])
-            if distance > 5:
-                route_points_5m.append(i)
-        return np.array(route_points_5m)
 
     @staticmethod
     def min_max_scaler(x, x_min, x_max, target_min=0, target_max=1):
