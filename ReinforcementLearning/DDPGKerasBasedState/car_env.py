@@ -183,17 +183,13 @@ class AirSimCarEnv(AirSimEnv):
             vxcostheta = 0
             vxsintheta = 0
 
-        trackpos = min(np.linalg.norm(self.xy_points - car_point, axis=1))
-        vxtrackpos = trackpos * car_vel_norm
-
-        reward = vxcostheta - vxsintheta - trackpos * 10 - vxtrackpos / 10
+        reward = ((vxcostheta - vxsintheta) / 3)
 
         done = self._check_done()
         if self._success:
             reward += 100
         if self.state['collision']:
             done = 1
-            reward -= 100
 
         return reward, done
 
@@ -240,7 +236,11 @@ class AirSimCarEnv(AirSimEnv):
         car_point = self.state['position'][:2]
 
         distances = np.linalg.norm(self.xy_points - car_point, axis=1)
+        min_distance = np.min(distances)
         min_distance_index = distances.argmin()
+
+        if min_distance > 1:
+            return True
 
         if self.timestep >= 499:
             return True
