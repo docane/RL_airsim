@@ -145,6 +145,19 @@ class DDPGagent(object):
         self.actor_opt.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
         return actor_loss
 
+    def update(self):
+        states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
+        target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
+                                        self.target_actor(
+                                            tf.convert_to_tensor(next_states, dtype=tf.float32))])
+        td_targets = self.td_target(rewards, target_qs.numpy(), dones)
+
+        critic_loss = self.critic_learn(states, actions, td_targets)
+        actor_loss = self.actor_learn(states)
+
+        self.update_target_network(self.tau)
+        return critic_loss, actor_loss
+
     def load_weights(self, path):
         self.actor.load_weights(path + 'airsim_ddpg_actor.h5')
         self.critic.load_weights(path + 'airsim_ddpg_critic.h5')
@@ -211,7 +224,7 @@ class DDPGagent(object):
 
     def train(self, max_episode_max):
         self.update_target_network(1.0)
-        self.writer = tf.summary.create_file_writer(f'summary/airsim_ddpg_{self.now}')
+        self.writer = tf.summary.create_file_writer(f'summary/airsim_ddpg_model_{self.now}')
         total_time = 0
         avg_step = 0
 
@@ -229,16 +242,7 @@ class DDPGagent(object):
                 self.buffer.add_buffer(state, action, reward, next_state, done)
 
                 if self.buffer.buffer_count() >= 10000:
-                    states, actions, rewards, next_states, dones = self.buffer.sample_batch(self.batch_size)
-                    target_qs = self.target_critic([tf.convert_to_tensor(next_states, dtype=tf.float32),
-                                                    self.target_actor(
-                                                        tf.convert_to_tensor(next_states, dtype=tf.float32))])
-                    td_targets = self.td_target(rewards, target_qs.numpy(), dones)
-
-                    critic_loss = self.critic_learn(states, actions, td_targets)
-                    actor_loss = self.actor_learn(states)
-
-                    self.update_target_network(self.tau)
+                    critic_loss, actor_loss = self.update()
                     critic_losses.append(critic_loss)
                     actor_losses.append(actor_loss)
 
@@ -258,8 +262,8 @@ class DDPGagent(object):
             critic_losses = np.array(critic_losses)
             actor_losses = np.array(actor_losses)
 
-            mean_critic_loss = np.round(critic_losses.mean(), 5) if critic_losses.size != 0 else 0
-            mean_actor_loss = np.round(actor_losses.mean(), 5) if actor_losses.size != 0 else 0
+            mean_critic_loss = np.round(np.mean(critic_losses), 5) if critic_losses.size != 0 else 0
+            mean_actor_loss = np.round(np.mean(actor_losses), 5) if actor_losses.size != 0 else 0
             mean_distance_per_step = np.mean(moving_distances)
             mean_distance_to_road_center = np.mean(distances_to_road_center)
 
