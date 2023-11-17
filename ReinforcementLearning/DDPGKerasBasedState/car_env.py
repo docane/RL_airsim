@@ -5,7 +5,6 @@ import time
 import airsim
 import pandas as pd
 from airsim import Vector3r
-from tensorflow_probability.python.distributions.normal import Normal
 
 
 class AirSimEnv(gym.Env):
@@ -75,7 +74,6 @@ class AirSimCarEnv(AirSimEnv):
 
         # 5m 단위로 경로 포인트 잡기
         self.route_points_5m = self._capture_route_points_5m()
-        self.curvature = self.compute_curvature(pos_x, pos_y)
 
         self.client.simPlotLineStrip(points=[Vector3r(x, y, z + 0.5) for x, y, z in self.xyz_points],
                                      is_persistent=True)
@@ -149,7 +147,7 @@ class AirSimCarEnv(AirSimEnv):
         theta = np.arcsin(ip)
         self.state['angle'][0] = theta
 
-        min_dist = min(dist)
+        min_dist = np.min(distances)
         self.state['track_distance'][0] = min_dist
 
         normalized_position = self.min_max_scaler(self.state['position'][:2], self.min_pos, self.max_pos, -1, 1)
@@ -254,7 +252,7 @@ class AirSimCarEnv(AirSimEnv):
             time.sleep(0.01)
             self.client.simPause(True)
             car_point = self.client.getCarState().kinematics_estimated.position.to_numpy_array()
-            min_distance = min(np.linalg.norm((self.xyz_points - car_point), axis=1))
+            min_distance = np.min(np.linalg.norm((self.xyz_points - car_point), axis=1))
             if min_distance < 1:
                 break
 
@@ -283,18 +281,5 @@ class AirSimCarEnv(AirSimEnv):
         return np.array(route_points_5m)
 
     @staticmethod
-    def gaussian(x, mean=0.0, sigma=1.0):
-        return (1 / np.sqrt(2 * np.pi * sigma ** 2)) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))
-
-    @staticmethod
     def min_max_scaler(x, x_min, x_max, target_min=0, target_max=1):
         return target_min + (x - x_min) * (target_max - target_min) / (x_max - x_min)
-
-    @staticmethod
-    def compute_curvature(x, y):
-        dx = np.gradient(x)
-        dy = np.gradient(y)
-        ddx = np.gradient(dx)
-        ddy = np.gradient(dy)
-        curvature = (dx * ddy - dy * ddx) / ((dx ** 2 + dy ** 2) ** (3 / 2))
-        return curvature
