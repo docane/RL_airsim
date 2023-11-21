@@ -33,10 +33,10 @@ class AirSimEnv(gym.Env):
 
 
 class AirSimCarEnv(AirSimEnv):
-    def __init__(self, ip_address='127.0.0.1'):
+    def __init__(self, ip_address='127.0.0.1', port=41451):
         super().__init__()
 
-        self.client = airsim.CarClient(ip=ip_address)
+        self.client = airsim.CarClient(ip=ip_address, port=port)
         self.car_controls = airsim.CarControls()
         self.car_state = None
 
