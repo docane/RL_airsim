@@ -235,17 +235,19 @@ class DDPGagent(object):
             tf.summary.scalar('Eval Mean Moving Distance', eval_mean_moving_distance,
                               step=episode // 100)
 
-    def train(self, max_episode_max):
+    def train(self, max_episode):
         self.update_target_network(1.0)
         self.writer = tf.summary.create_file_writer(f'summary/airsim_ddpg_model_{self.now}')
         total_time = 0
         avg_step = 0
 
-        for ep in range(int(max_episode_max)):
-            pre_noise = np.zeros(self.action_dim)
+        for ep in range(int(max_episode)):
             step, episode_reward, done = 0, 0, False
-            actor_losses, critic_losses = [], []
-            moving_distances, distances_to_road_center = [], []
+            pre_noise = np.zeros(self.action_dim)
+            critic_loss_list = []
+            actor_loss_list = []
+            distance_to_road_center_list = []
+            moving_distance_list = []
             state = self.env.reset()
             while not done:
                 action = self.get_action(state)
@@ -256,40 +258,40 @@ class DDPGagent(object):
 
                 if self.buffer.buffer_count() >= 10000:
                     critic_loss, actor_loss = self.update()
-                    critic_losses.append(critic_loss)
-                    actor_losses.append(actor_loss)
+                    critic_loss_list.append(critic_loss)
+                    actor_loss_list.append(actor_loss)
 
                 pre_noise = noise
                 state = next_state
 
                 episode_reward += reward
                 step += 1
-                moving_distances.append(np.linalg.norm(info['position'][:2] - info['preposition'][:2]))
-                distances_to_road_center.append(info['track_distance'][0])
+                moving_distance_list.append(np.linalg.norm(info['position'][:2] - info['preposition'][:2]))
+                distance_to_road_center_list.append(info['track_distance'][0])
 
             total_time += step
             avg_step = 0.9 * avg_step + 0.1 * step if avg_step != 0 else step
 
-            moving_distances = np.array(moving_distances)
-            distances_to_road_center = np.array(distances_to_road_center)
-            critic_losses = np.array(critic_losses)
-            actor_losses = np.array(actor_losses)
+            critic_loss_list = np.array(critic_loss_list)
+            actor_loss_list = np.array(actor_loss_list)
+            moving_distance_list = np.array(moving_distance_list)
+            distance_to_road_center_list = np.array(distance_to_road_center_list)
 
-            mean_critic_loss = np.round(np.mean(critic_losses), 5) if critic_losses.size != 0 else 0
-            mean_actor_loss = np.round(np.mean(actor_losses), 5) if actor_losses.size != 0 else 0
-            mean_distance_per_step = np.mean(moving_distances)
-            mean_distance_to_road_center = np.mean(distances_to_road_center)
+            mean_critic_loss = np.round(np.mean(critic_loss_list), 5) if critic_loss_list.size != 0 else 0
+            mean_actor_loss = np.round(np.mean(actor_loss_list), 5) if actor_loss_list.size != 0 else 0
+            mean_moving_distance = np.mean(moving_distance_list)
+            mean_distance_to_road_center = np.mean(distance_to_road_center_list)
 
             log = f'Episode: {ep + 1}'
-            log += f' Step: {step}'
             log += f' Total Time: {total_time}'
+            log += f' Step: {step}'
             log += f' Avg Step: {round(avg_step, 2)}'
             log += f' Reward: {round(episode_reward, 2)}'
-            log += f' Actor Loss: {mean_actor_loss}'
             log += f' Critic Loss: {mean_critic_loss}'
+            log += f' Actor Loss: {mean_actor_loss}'
             print(log)
 
-            self.draw_tensorboard(ep, episode_reward, avg_step, mean_distance_per_step,
+            self.draw_tensorboard(ep, episode_reward, avg_step, mean_moving_distance,
                                   mean_distance_to_road_center, mean_actor_loss, mean_critic_loss)
             self.save_weights(self.save_model_dir)
 
