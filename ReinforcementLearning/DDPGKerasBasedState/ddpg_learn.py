@@ -188,38 +188,51 @@ class DDPGagent(object):
             tf.summary.scalar('Critic Loss/Episode', critic_loss, step=episode)
 
     def evaluation(self, episode):
-        eval_index = [0, 370, 770]
-        eval_step = 0
-        evaluation_rewards = []
-        distances_to_road_center = []
-        for i in eval_index:
+        eval_index_list = [0, 370, 770]
+        eval_step_list = []
+        eval_reward_list = []
+        eval_distance_to_road_center_list = []
+        eval_moving_distance_list = []
+
+        for eval_index in eval_index_list:
+            eval_step = 0
             episode_reward = 0
             done = False
-            state = self.env.reset(i)
+            state = self.env.reset(eval_index)
             while not done:
                 action = self.get_action(state)
                 next_state, reward, done, info = self.env.step(action)
                 episode_reward += reward
                 state = next_state
-                distances_to_road_center.append(info['track_distance'][0])
+
                 eval_step += 1
-            evaluation_rewards.append(episode_reward)
-        evaluation_rewards = np.array(evaluation_rewards)
-        distances_to_road_center = np.array(distances_to_road_center)
+                eval_distance_to_road_center_list.append(info['track_distance'][0])
+                eval_moving_distance_list.append(np.linalg.norm(info['position'][:2] - info['preposition'][:2]))
 
-        mean_evaluation_reward = np.mean(evaluation_rewards)
-        mean_distance_to_road_center = np.mean(distances_to_road_center)
+            eval_reward_list.append(episode_reward)
+            eval_step_list.append(eval_step)
 
-        log = f'Eval Step: {eval_step}'
-        log += f' Mean Eval Step: {eval_step / len(eval_index)}'
-        log += f' Mean Eval Reward: {mean_evaluation_reward}'
-        log += f' Mean Eval Track Distance: {mean_distance_to_road_center}'
+        eval_reward_list = np.array(eval_reward_list)
+        eval_distance_to_road_center_list = np.array(eval_distance_to_road_center_list)
+
+        eval_mean_step = np.mean(eval_step_list)
+        eval_mean_reward = np.mean(eval_reward_list)
+        eval_mean_distance_to_road_center = np.mean(eval_distance_to_road_center_list)
+        eval_mean_moving_distance = np.mean(eval_moving_distance_list)
+
+        log = f'Eval Mean Step: {eval_mean_step}'
+        log += f' Eval Mean Reward: {eval_mean_reward}'
+        log += f' Eval Mean Track Distance: {eval_mean_distance_to_road_center}'
+        log += f' Eval Mean Moving Distance: {eval_mean_moving_distance}'
         print(log)
 
         with self.writer.as_default():
-            tf.summary.scalar('Evaluation Reward', mean_evaluation_reward, step=episode // 100)
-            tf.summary.scalar('Evaluation Mean Distance to Road Center',
-                              mean_distance_to_road_center,
+            tf.summary.scalar('Eval Mean Step', eval_mean_step, step=episode // 100)
+            tf.summary.scalar('Eval Mean Reward', eval_mean_reward, step=episode // 100)
+            tf.summary.scalar('Eval Mean Distance to Road Center',
+                              eval_mean_distance_to_road_center,
+                              step=episode // 100)
+            tf.summary.scalar('Eval Mean Moving Distance', eval_mean_moving_distance,
                               step=episode // 100)
 
     def train(self, max_episode_max):
