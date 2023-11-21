@@ -239,6 +239,9 @@ class AirSimCarEnv(AirSimEnv):
         min_distance = np.min(distances)
         min_distance_index = distances.argmin()
 
+        if self.state['collision']:
+            return True
+
         if min_distance > 1:
             return True
 
@@ -248,9 +251,9 @@ class AirSimCarEnv(AirSimEnv):
         if min_distance_index > 2100:
             self._success = True
             return True
-        else:
-            self._success = False
-            return False
+
+        self._success = False
+        return False
 
     @staticmethod
     def min_max_scaler(x, x_min, x_max, target_min=0, target_max=1):
